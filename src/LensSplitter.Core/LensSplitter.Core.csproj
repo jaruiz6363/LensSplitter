@@ -1,0 +1,6 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>LensSplitter.Core</RootNamespace>
+    <AssemblyName>LensSplitter.Core</AssemblyName>
+  </PropertyGroup>
+</Project>

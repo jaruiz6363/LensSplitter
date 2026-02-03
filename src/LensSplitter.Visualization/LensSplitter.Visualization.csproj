@@ -1,0 +1,10 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>LensSplitter.Visualization</RootNamespace>
+    <AssemblyName>LensSplitter.Visualization</AssemblyName>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\LensSplitter.Core\LensSplitter.Core.csproj" />
+  </ItemGroup>
+</Project>

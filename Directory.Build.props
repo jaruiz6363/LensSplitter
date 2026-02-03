@@ -1,0 +1,13 @@
+<Project>
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <Authors>Javier A Ruiz</Authors>
+    <Company>Javier A Ruiz</Company>
+    <Copyright>Copyright (c) 2026 Javier A Ruiz</Copyright>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <RepositoryType>git</RepositoryType>
+    <Description>Power-preserving optical lens element splitting for aberration reduction</Description>
+  </PropertyGroup>
+</Project>

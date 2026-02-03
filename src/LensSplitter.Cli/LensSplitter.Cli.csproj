@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <RootNamespace>LensSplitter.Cli</RootNamespace>
+    <AssemblyName>lenssplitter</AssemblyName>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="System.CommandLine" Version="2.0.0-beta4.22272.1" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\LensSplitter.Core\LensSplitter.Core.csproj" />
+    <ProjectReference Include="..\LensSplitter.Parsing\LensSplitter.Parsing.csproj" />
+    <ProjectReference Include="..\LensSplitter.Visualization\LensSplitter.Visualization.csproj" />
+  </ItemGroup>
+
+  <!-- Copy glass catalogs to output directory -->
+  <ItemGroup>
+    <None Include="..\..\catalogs\**\*" CopyToOutputDirectory="PreserveNewest" LinkBase="catalogs" />
+  </ItemGroup>
+</Project>
