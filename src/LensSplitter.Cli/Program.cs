@@ -43,7 +43,7 @@ class Program
     {
         Console.WriteLine();
         Console.WriteLine("╔══════════════════════════════════════════════════════════════════════╗");
-        Console.WriteLine("║                         LENSSPLITTER v1.0                            ║");
+        Console.WriteLine("║                         LENSSPLITTER v1.1                            ║");
         Console.WriteLine("║            Power-Preserving Optical Element Splitting                ║");
         Console.WriteLine("╚══════════════════════════════════════════════════════════════════════╝");
         Console.WriteLine();

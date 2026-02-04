@@ -76,7 +76,7 @@ You should see version 8.0.x or higher.
 ### Clone the Repository
 
 ```bash
-git clone https://github.com/your-username/LensSplitter.git
+git clone https://github.com/jaruiz6363/LensSplitter.git
 cd LensSplitter
 ```
 

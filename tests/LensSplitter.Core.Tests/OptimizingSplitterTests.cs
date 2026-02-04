@@ -227,7 +227,8 @@ public class OptimizingSplitterTests
         Assert.False(negativeElem.IsUndercorrected);
 
         // Total S1 should be undercorrected (positive element dominates)
-        Assert.True(analysis.TotalS1 < 0, "Doublet should be net undercorrected");
+        // Seidel convention: S1 > 0 = undercorrected
+        Assert.True(analysis.TotalS1 > 0, "Doublet should be net undercorrected (S1 > 0 in Seidel convention)");
 
         // Since these elements are NOT grouped (wide gap), positive should be recommended
         Assert.False(positiveElem.IsPartOfGroup, "Elements should not be grouped with >2mm gap");

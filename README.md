@@ -38,7 +38,7 @@ This presents a menu-driven interface:
 
 ```
 ╔══════════════════════════════════════════════════════════════════════╗
-║                         LENSSPLITTER v1.0                            ║
+║                         LENSSPLITTER v1.1                            ║
 ║            Power-Preserving Optical Element Splitting                ║
 ╚══════════════════════════════════════════════════════════════════════╝
 
@@ -168,11 +168,20 @@ The default `MaxEflDeviation` is 3%. Configurations that deviate more from the t
 
 ### Element Selection
 
-When no element is specified, LensSplitter analyzes all elements and recommends the best candidate based on:
+When no element is specified, LensSplitter analyzes all elements and recommends the best candidate for splitting. Elements are first filtered by eligibility, then ranked by a weighted aberration scoring that matches the optimization merit function.
+
+**Eligibility criteria (elements must have all of these):**
 - Positive power (splitting negative elements is typically not beneficial)
-- Not part of a cemented doublet
-- No aspheric surfaces
-- Highest contribution to system aberrations
+- Not part of a cemented or air-spaced doublet/triplet
+- No aspheric (conic) surfaces
+
+**Scoring:** Eligible elements are ranked by their weighted contribution to system aberrations, computed from full Seidel ray-traced coefficients (S1, S2, S3) summed per element:
+
+```
+Score = W1·|S1_element| + W2·|S2_element| + W3·|S3_element|
+```
+
+This uses the same weights as the optimization merit function (W1=1.0, W2=1.5, W3=1.0), ensuring the element selected for splitting is the one whose splitting most improves overall system performance. Including coma (S2) in the scoring is particularly important for systems like Cooke triplets, where elements far from the stop contribute significant coma that S1-only scoring would miss.
 
 ## Glass Catalogs
 

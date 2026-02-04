@@ -1522,8 +1522,29 @@ public class OptimizingSplitter
         // Detect element groups (doublets, triplets)
         var groupInfo = DetectElementGroups(elements);
 
+        // Use full Seidel ray-traced calculation to get per-surface aberration coefficients.
+        // This gives accurate S1, S2, S3 per surface, which we sum per element.
+        // This replaces the thin-lens S1-only approximation for element scoring.
+        SeidelResult? seidelResult = null;
+        Dictionary<int, SeidelSurfaceCoefficients>? surfaceCoeffs = null;
+        try
+        {
+            seidelResult = _seidelCalc.Calculate(system, wavelength);
+            if (seidelResult.SurfaceCoefficients.Count > 0)
+            {
+                surfaceCoeffs = seidelResult.SurfaceCoefficients
+                    .ToDictionary(c => c.SurfaceIndex);
+            }
+        }
+        catch
+        {
+            // Fall back to thin-lens approximation if Seidel calculation fails
+        }
+
         var analyses = new List<ElementAberrationAnalysis>();
         double totalS1 = 0;
+        double totalS2 = 0;
+        double totalS3 = 0;
 
         for (int i = 0; i < elements.Count; i++)
         {
@@ -1543,49 +1564,68 @@ public class OptimizingSplitter
             double conic2 = element.RearSurface.Conic;
             bool hasConic = Math.Abs(conic1) > 1e-10 || Math.Abs(conic2) > 1e-10;
 
-            // Calculate position factor based on conjugate condition
-            double Y;
-            if (i == 0 && isFiniteConjugate)
-            {
-                // First element with finite conjugate - calculate Y from object distance
-                double efl = Math.Abs(power) > 1e-12 ? 1.0 / power : 1000.0;
-                double imageDistance = 1.0 / (power - 1.0 / objectDistance);
-                Y = AberrationCalculator.CalculatePositionFactor(objectDistance, imageDistance);
-            }
-            else if (i == 0)
-            {
-                Y = -1.0; // Infinite conjugate
-            }
-            else
-            {
-                // For subsequent elements, calculate based on ray convergence
-                // This is an approximation - full calculation would require tracing
-                Y = -1.0 + 0.1 * i; // Elements further in see more converging light
-            }
-            double r1 = element.R1;
-            double r2 = element.R2;
+            double S1, S2, S3;
 
-            // Calculate actual shape factor from radii: X = (R2 + R1) / (R2 - R1)
-            double X_actual;
-            if (Math.Abs(r2 - r1) > 1e-10)
+            // Try to get per-element aberrations from full Seidel ray trace
+            // by summing the contributions from both surfaces of this element
+            if (surfaceCoeffs != null)
             {
-                X_actual = (r2 + r1) / (r2 - r1);
+                S1 = 0; S2 = 0; S3 = 0;
+                int frontIdx = element.FrontSurface.Index;
+                int rearIdx = element.RearSurface.Index;
+                if (surfaceCoeffs.TryGetValue(frontIdx, out var frontCoeffs))
+                {
+                    S1 += frontCoeffs.S1;
+                    S2 += frontCoeffs.S2;
+                    S3 += frontCoeffs.S3;
+                }
+                if (surfaceCoeffs.TryGetValue(rearIdx, out var rearCoeffs))
+                {
+                    S1 += rearCoeffs.S1;
+                    S2 += rearCoeffs.S2;
+                    S3 += rearCoeffs.S3;
+                }
             }
             else
             {
-                X_actual = 0; // Equiconvex/equiconcave
-            }
+                // Fallback: thin-lens S1 approximation (no S2/S3 available)
+                double Y;
+                if (i == 0 && isFiniteConjugate)
+                {
+                    double imageDistance = 1.0 / (power - 1.0 / objectDistance);
+                    Y = AberrationCalculator.CalculatePositionFactor(objectDistance, imageDistance);
+                }
+                else if (i == 0)
+                {
+                    Y = -1.0;
+                }
+                else
+                {
+                    Y = -1.0 + 0.1 * i;
+                }
 
-            double S1;
-            if (hasConic)
-            {
-                // Include conic contributions
-                S1 = AberrationCalculator.CalculateS1WithConic(
-                    rayHeight, power, n, X_actual, Y, r1, r2, conic1, conic2);
-            }
-            else
-            {
-                S1 = AberrationCalculator.CalculateS1ThinLens(rayHeight, power, n, X_actual, Y);
+                double X_actual;
+                double r1 = element.R1;
+                double r2 = element.R2;
+                if (Math.Abs(r2 - r1) > 1e-10)
+                    X_actual = (r2 + r1) / (r2 - r1);
+                else
+                    X_actual = 0;
+
+                if (hasConic)
+                {
+                    S1 = AberrationCalculator.CalculateS1WithConic(
+                        rayHeight, power, n, X_actual, Y, r1, r2, conic1, conic2);
+                }
+                else
+                {
+                    S1 = AberrationCalculator.CalculateS1ThinLens(rayHeight, power, n, X_actual, Y);
+                }
+                // Negate to match Seidel convention (S1 > 0 = undercorrected).
+                // The thin-lens formula uses opposite sign convention (S1 < 0 = undercorrected).
+                S1 = -S1;
+                S2 = 0;
+                S3 = 0;
             }
 
             // Get group information for this element
@@ -1601,6 +1641,8 @@ public class OptimizingSplitter
                 RayHeight = rayHeight,
                 RefractiveIndex = n,
                 S1Contribution = S1,
+                S2Contribution = S2,
+                S3Contribution = S3,
                 IsPositive = power > 0,
                 HasConicSurfaces = hasConic,
                 FrontConic = conic1,
@@ -1610,18 +1652,25 @@ public class OptimizingSplitter
                 GroupDescription = groupDesc
             });
 
-            // Only add finite S1 values to total (skip NaN/Infinity)
-            if (double.IsFinite(S1))
-            {
-                totalS1 += S1;
-            }
+            if (double.IsFinite(S1)) totalS1 += S1;
+            if (double.IsFinite(S2)) totalS2 += S2;
+            if (double.IsFinite(S3)) totalS3 += S3;
         }
+
+        // Get aberration weights for priority scoring - use same weights as merit function
+        var weights = _currentSettings?.AberrationWeights ?? AberrationWeights.Default;
 
         // Calculate percentages and determine splitting priority
         foreach (var analysis in analyses)
         {
             analysis.S1Percentage = Math.Abs(totalS1) > 1e-20
                 ? (analysis.S1Contribution / totalS1) * 100.0
+                : 0;
+            analysis.S2Percentage = Math.Abs(totalS2) > 1e-20
+                ? (analysis.S2Contribution / totalS2) * 100.0
+                : 0;
+            analysis.S3Percentage = Math.Abs(totalS3) > 1e-20
+                ? (analysis.S3Contribution / totalS3) * 100.0
                 : 0;
 
             // Never split elements with conic surfaces - they're already optimized
@@ -1648,20 +1697,22 @@ public class OptimizingSplitter
                 continue;
             }
 
-            // Positive power elements can always be split - splitting reduces |S1|
-            // Give higher priority to elements with larger |S1| contribution
-            // Additionally boost priority if S1 sign matches total (main contributor)
-            double basePriority = Math.Abs(analysis.S1Contribution);
+            // Compute priority using weighted combination of S1, S2, S3 contributions.
+            // This mirrors the optimization merit function weights, ensuring the element
+            // selected for splitting is the one whose splitting most improves the
+            // overall system performance - not just spherical aberration alone.
+            double basePriority = weights.W1 * Math.Abs(analysis.S1Contribution) +
+                                  weights.W2 * Math.Abs(analysis.S2Contribution) +
+                                  weights.W3 * Math.Abs(analysis.S3Contribution);
 
+            // Boost priority if S1 sign matches total (main contributor to dominant aberration)
             bool sameSignAsTotal = (analysis.S1Contribution > 0) == (totalS1 > 0);
             if (sameSignAsTotal)
             {
-                // Boost priority for elements contributing to the dominant aberration
-                analysis.SplittingPriority = basePriority * 1.5;
+                analysis.SplittingPriority = basePriority * 1.2;
             }
             else
             {
-                // Still splittable, just lower priority
                 analysis.SplittingPriority = basePriority;
             }
         }
@@ -1680,6 +1731,8 @@ public class OptimizingSplitter
             Elements = analyses,
             SortedByPriority = sortedAnalyses,
             TotalS1 = totalS1,
+            TotalS2 = totalS2,
+            TotalS3 = totalS3,
             RecommendedElementIndex = recommendedIndex,
             RecommendedElement = recommendedIndex >= 0 && elements.Count > recommendedIndex
                 ? elements[recommendedIndex]
@@ -1828,7 +1881,9 @@ public class OptimizingSplitter
     }
 
     /// <summary>
-    /// Finds the best element to split for maximum S₁ reduction.
+    /// Finds the best element to split using weighted Seidel aberration scoring (S₁, S₂, S₃).
+    /// Scoring uses the same aberration weights as the optimization merit function to ensure
+    /// the selected element is the one whose splitting most improves overall system performance.
     /// </summary>
     /// <param name="system">The optical system.</param>
     /// <returns>Index of the recommended element to split.</returns>
@@ -1861,7 +1916,11 @@ public class ElementAberrationAnalysis
     public double RayHeight { get; set; }
     public double RefractiveIndex { get; set; }
     public double S1Contribution { get; set; }
+    public double S2Contribution { get; set; }
+    public double S3Contribution { get; set; }
     public double S1Percentage { get; set; }
+    public double S2Percentage { get; set; }
+    public double S3Percentage { get; set; }
     public bool IsPositive { get; set; }
     public double SplittingPriority { get; set; }
 
@@ -1901,9 +1960,11 @@ public class ElementAberrationAnalysis
     public bool IsPartOfGroup => IsPartOfCementedGroup || IsPartOfAirSpacedGroup;
 
     /// <summary>
-    /// Whether this element contributes undercorrected (negative) S₁.
+    /// Whether this element contributes undercorrected spherical aberration (S₁ &gt; 0).
+    /// Uses Seidel sign convention where positive S₁ = undercorrected (marginal ray
+    /// focuses behind the paraxial focus), matching ZEMAX convention.
     /// </summary>
-    public bool IsUndercorrected => S1Contribution < 0;
+    public bool IsUndercorrected => S1Contribution > 0;
 
     /// <summary>
     /// Whether splitting this element is recommended.
@@ -1914,7 +1975,7 @@ public class ElementAberrationAnalysis
     public override string ToString()
     {
         string sign = IsPositive ? "+" : "-";
-        string correction = IsUndercorrected ? "undercorrected" : "overcorrected";
+        string correction = IsUndercorrected ? "undercorrected" : "overcorrected";  // Seidel convention: S1>0 = undercorrected
         string recommend = "";
         if (HasConicSurfaces)
         {
@@ -1934,7 +1995,8 @@ public class ElementAberrationAnalysis
         }
         string conicInfo = HasConicSurfaces ? $" K1={FrontConic:F3}, K2={RearConic:F3}," : "";
         return $"Element {ElementIndex + 1}: P={Power:F6} ({sign}), y={RayHeight:F2}mm,{conicInfo} " +
-               $"S1={S1Contribution:E3} ({correction}, {Math.Abs(S1Percentage):F1}%){recommend}";
+               $"S1={S1Contribution:E3} ({correction}, {Math.Abs(S1Percentage):F1}%), " +
+               $"S2={S2Contribution:E3} ({Math.Abs(S2Percentage):F1}%){recommend}";
     }
 }
 
@@ -1946,6 +2008,8 @@ public class ElementAnalysisResult
     public List<ElementAberrationAnalysis> Elements { get; set; } = new();
     public List<ElementAberrationAnalysis> SortedByPriority { get; set; } = new();
     public double TotalS1 { get; set; }
+    public double TotalS2 { get; set; }
+    public double TotalS3 { get; set; }
 
     /// <summary>
     /// Index of the recommended element to split (-1 if no splittable elements).
@@ -1981,9 +2045,11 @@ public class ElementAnalysisResult
         {
             var sb = new System.Text.StringBuilder();
             sb.AppendLine($"Conjugate: {ConjugateDescription}");
-            sb.AppendLine($"Total system S₁: {TotalS1:E4} ({(TotalS1 < 0 ? "undercorrected" : "overcorrected")})");
+            sb.AppendLine($"Total system S₁: {TotalS1:E4} ({(TotalS1 > 0 ? "undercorrected" : "overcorrected")})");
+            sb.AppendLine($"Total system S₂: {TotalS2:E4} (coma)");
+            sb.AppendLine($"Total system S₃: {TotalS3:E4} (astigmatism)");
             sb.AppendLine();
-            sb.AppendLine("Element Analysis (by splitting priority):");
+            sb.AppendLine("Element Analysis (by splitting priority - weighted S₁+S₂+S₃):");
             foreach (var elem in SortedByPriority)
             {
                 sb.AppendLine($"  {elem}");
