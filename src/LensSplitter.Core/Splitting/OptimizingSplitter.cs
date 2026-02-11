@@ -1,3 +1,4 @@
+using LensSplitter.Core.Aberrations;
 using LensSplitter.Core.Models;
 using LensSplitter.Core.Paraxial;
 
@@ -11,6 +12,7 @@ public class OptimizingSplitter
     private readonly ParaxialRayTracer _tracer = new();
     private readonly AberrationCalculator _aberrationCalc = new();
     private readonly SeidelCalculator _seidelCalc = new();
+    private readonly BuchdahlCalculator _buchdahlCalc = new();
     private OptimizationSettings? _currentSettings;
 
     /// <summary>
@@ -195,7 +197,15 @@ public class OptimizingSplitter
             : 1.0;
         if (fieldAngle < 0.001) fieldAngle = 1.0;
         var originalSeidel = _seidelCalc.Calculate(system, wavelength, fieldAngle);
-        double originalMeritFunction = SeidelCalculator.CalculateMeritFunction(originalSeidel, settings.AberrationWeights);
+
+        // Compute Buchdahl for the original system so the baseline includes 5th-order terms
+        BuchdahlResult? originalBuchdahl = null;
+        if (settings.AberrationWeights.IncludeBuchdahl && settings.AberrationWeights.HasNonZeroBuchdahlWeights)
+        {
+            try { originalBuchdahl = _buchdahlCalc.Calculate(system, wavelength); } catch { }
+        }
+
+        double originalMeritFunction = SeidelCalculator.CalculateMeritFunction(originalSeidel, settings.AberrationWeights, originalBuchdahl);
         _originalSystemMeritFunction = originalMeritFunction;
 
         // Phase 1: Grid search to find approximate optimum
@@ -245,10 +255,17 @@ public class OptimizingSplitter
         // Calculate full Seidel aberrations for the split system (reuse originalSeidel calculated earlier)
         var splitSeidel = _seidelCalc.Calculate(splitSystem, wavelength, fieldAngle);
 
-        // Calculate merit functions using settings weights
+        // Compute Buchdahl for the split system
+        BuchdahlResult? splitBuchdahl = null;
+        if (settings.AberrationWeights.IncludeBuchdahl && settings.AberrationWeights.HasNonZeroBuchdahlWeights)
+        {
+            try { splitBuchdahl = _buchdahlCalc.Calculate(splitSystem, wavelength); } catch { }
+        }
+
+        // Calculate merit functions using settings weights (both include Buchdahl if enabled)
         var weights = settings.AberrationWeights;
-        double originalMF = SeidelCalculator.CalculateMeritFunction(originalSeidel, weights);
-        double splitMF = SeidelCalculator.CalculateMeritFunction(splitSeidel, weights);
+        double originalMF = SeidelCalculator.CalculateMeritFunction(originalSeidel, weights, originalBuchdahl);
+        double splitMF = SeidelCalculator.CalculateMeritFunction(splitSeidel, weights, splitBuchdahl);
 
         return new IterativeSplitResult
         {
@@ -398,8 +415,22 @@ public class OptimizingSplitter
             result.CL_Total = seidel.CL;
             result.CT_Total = seidel.CT;
 
+            // Compute Buchdahl if weights are set
+            BuchdahlResult? buchdahl = null;
+            if (settings.AberrationWeights.IncludeBuchdahl && settings.AberrationWeights.HasNonZeroBuchdahlWeights)
+            {
+                try
+                {
+                    buchdahl = _buchdahlCalc.Calculate(trialSystem, _optimizationWavelength);
+                }
+                catch
+                {
+                    // If Buchdahl calculation fails, proceed without it
+                }
+            }
+
             // Calculate weighted merit function
-            double meritFunction = SeidelCalculator.CalculateMeritFunction(seidel, settings.AberrationWeights);
+            double meritFunction = SeidelCalculator.CalculateMeritFunction(seidel, settings.AberrationWeights, buchdahl);
 
             // Add EFL penalty: quadratic penalty for deviation from target EFL
             if (settings.MaxEflDeviation > 0 && _targetEfl > 0)

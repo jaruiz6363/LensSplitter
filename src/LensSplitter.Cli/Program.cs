@@ -1,4 +1,5 @@
 using System.CommandLine;
+using LensSplitter.Core.Aberrations;
 using LensSplitter.Core.Paraxial;
 using LensSplitter.Core.Splitting;
 using LensSplitter.Parsing;
@@ -13,6 +14,7 @@ class Program
     private static string? _lastInputFile;
     private static string? _lastOutputDir;
     private static string? _lastCatalogPath;
+    private static AberrationWeights _currentWeights = AberrationWeights.Default;
 
     static async Task<int> Main(string[] args)
     {
@@ -43,7 +45,7 @@ class Program
     {
         Console.WriteLine();
         Console.WriteLine("╔══════════════════════════════════════════════════════════════════════╗");
-        Console.WriteLine("║                         LENSSPLITTER v1.1                            ║");
+        Console.WriteLine("║                         LENSSPLITTER v1.2                            ║");
         Console.WriteLine("║            Power-Preserving Optical Element Splitting                ║");
         Console.WriteLine("╚══════════════════════════════════════════════════════════════════════╝");
         Console.WriteLine();
@@ -71,9 +73,10 @@ class Program
             Console.WriteLine("  3. Split and optimize glass selection (try glass combinations)");
             Console.WriteLine("  4. Show command-line help");
             Console.WriteLine("  S. Set input/output/catalog paths");
+            Console.WriteLine("  W. Configure aberration weights");
             Console.WriteLine("  Q. Quit");
             Console.WriteLine();
-            Console.Write("Enter choice (1-4, S, or Q): ");
+            Console.Write("Enter choice (1-4, S, W, or Q): ");
 
             var choice = Console.ReadLine()?.Trim().ToUpperInvariant();
 
@@ -94,13 +97,16 @@ class Program
                 case "S":
                     ConfigurePaths();
                     break;
+                case "W":
+                    ConfigureWeights();
+                    break;
                 case "Q":
                 case "QUIT":
                 case "EXIT":
                     Console.WriteLine("Goodbye!");
                     return 0;
                 default:
-                    Console.WriteLine("Invalid choice. Please enter 1-4, S, or Q.\n");
+                    Console.WriteLine("Invalid choice. Please enter 1-4, S, W, or Q.\n");
                     break;
             }
         }
@@ -142,6 +148,58 @@ class Program
         }
 
         Console.WriteLine("\nPaths updated.\n");
+    }
+
+    static void ConfigureWeights()
+    {
+        Console.WriteLine("\n── Configure Aberration Weights ──\n");
+
+        Console.WriteLine("Current Seidel (3rd-order) weights:");
+        Console.WriteLine($"  W1  (Spherical):    {_currentWeights.W1}");
+        Console.WriteLine($"  W2  (Coma):         {_currentWeights.W2}");
+        Console.WriteLine($"  W3  (Astigmatism):  {_currentWeights.W3}");
+        Console.WriteLine($"  W4  (Petzval):      {_currentWeights.W4}");
+        Console.WriteLine($"  W5  (Distortion):   {_currentWeights.W5}");
+        Console.WriteLine($"  WCL (Axial Color):  {_currentWeights.WCL}");
+        Console.WriteLine($"  WCT (Lat. Color):   {_currentWeights.WCT}");
+        Console.WriteLine($"  IncludeChromatic:   {_currentWeights.IncludeChromatic}");
+        Console.WriteLine();
+        Console.WriteLine("Current Buchdahl (5th-order) weights:");
+        Console.WriteLine($"  WBSph (Spherical, Ap):        {_currentWeights.WBSph}");
+        Console.WriteLine($"  WBCma (Coma, Aq):             {_currentWeights.WBCma}");
+        Console.WriteLine($"  WBObl (Oblique Sph, Bp):      {_currentWeights.WBObl}");
+        Console.WriteLine($"  WBEll (Elliptical Coma, Bq):  {_currentWeights.WBEll}");
+        Console.WriteLine($"  WBAst (Astigmatism, Cp):      {_currentWeights.WBAst}");
+        Console.WriteLine($"  WBDst (Distortion, Cq):       {_currentWeights.WBDst}");
+        Console.WriteLine($"  IncludeBuchdahl:               {_currentWeights.IncludeBuchdahl}");
+        Console.WriteLine();
+
+        if (PromptForYesNo("Edit Seidel weights?", false))
+        {
+            _currentWeights.W1 = PromptForDouble("  W1  (Spherical)", _currentWeights.W1);
+            _currentWeights.W2 = PromptForDouble("  W2  (Coma)", _currentWeights.W2);
+            _currentWeights.W3 = PromptForDouble("  W3  (Astigmatism)", _currentWeights.W3);
+            _currentWeights.W4 = PromptForDouble("  W4  (Petzval)", _currentWeights.W4);
+            _currentWeights.W5 = PromptForDouble("  W5  (Distortion)", _currentWeights.W5);
+            _currentWeights.WCL = PromptForDouble("  WCL (Axial Color)", _currentWeights.WCL);
+            _currentWeights.WCT = PromptForDouble("  WCT (Lat. Color)", _currentWeights.WCT);
+            _currentWeights.IncludeChromatic = PromptForYesNo("  Include chromatic?", _currentWeights.IncludeChromatic);
+        }
+
+        if (PromptForYesNo("Edit Buchdahl weights?", false))
+        {
+            _currentWeights.WBSph = PromptForDouble("  WBSph (Spherical, Ap)", _currentWeights.WBSph);
+            _currentWeights.WBCma = PromptForDouble("  WBCma (Coma, Aq)", _currentWeights.WBCma);
+            _currentWeights.WBObl = PromptForDouble("  WBObl (Oblique Sph, Bp)", _currentWeights.WBObl);
+            _currentWeights.WBEll = PromptForDouble("  WBEll (Elliptical Coma, Bq)", _currentWeights.WBEll);
+            _currentWeights.WBAst = PromptForDouble("  WBAst (Astigmatism, Cp)", _currentWeights.WBAst);
+            _currentWeights.WBDst = PromptForDouble("  WBDst (Distortion, Cq)", _currentWeights.WBDst);
+            _currentWeights.IncludeBuchdahl = _currentWeights.HasNonZeroBuchdahlWeights;
+            Console.WriteLine($"  IncludeBuchdahl auto-set to: {_currentWeights.IncludeBuchdahl}");
+        }
+
+        Console.WriteLine($"\nUpdated weights: {_currentWeights}");
+        Console.WriteLine();
     }
 
     static string PromptForFile(string prompt, string? defaultValue = null, bool mustExist = true)
@@ -729,13 +787,20 @@ class Program
             MaxPowerRatio = maxRatio,
             OptimizeAirGap = true,
             MinEdgeClearance = edgeClearance,
-            EnforceGeometryConstraints = enforceGeometry
+            EnforceGeometryConstraints = enforceGeometry,
+            AberrationWeights = _currentWeights
         };
 
         Console.WriteLine($"\nPerforming iterative optimization...");
         Console.WriteLine($"  Power ratio range: {minRatio:F2} - {maxRatio:F2}");
         Console.WriteLine($"  Aberration weights: W1={settings.AberrationWeights.W1}, W2={settings.AberrationWeights.W2}, " +
                           $"W3={settings.AberrationWeights.W3}, W4={settings.AberrationWeights.W4}, W5={settings.AberrationWeights.W5}");
+        if (settings.AberrationWeights.IncludeBuchdahl)
+        {
+            Console.WriteLine($"  Buchdahl weights: WBSph={settings.AberrationWeights.WBSph}, WBCma={settings.AberrationWeights.WBCma}, " +
+                              $"WBObl={settings.AberrationWeights.WBObl}, WBEll={settings.AberrationWeights.WBEll}, " +
+                              $"WBAst={settings.AberrationWeights.WBAst}, WBDst={settings.AberrationWeights.WBDst}");
+        }
         if (enforceGeometry)
         {
             Console.WriteLine($"  Enforce geometry: enabled (total track may change)");
@@ -816,6 +881,29 @@ class Program
                 PrintAberrationRowMm($"CT (Lat {maxField:F0}{fieldUnit})", origChroma.LateralColor, splitChroma.LateralColor);
             }
             Console.WriteLine("  ─────────────────────────────────────────────────────────────");
+
+            // Buchdahl 5th-order comparison
+            try
+            {
+                var buchdahlCalc = new BuchdahlCalculator();
+                var origB = buchdahlCalc.Calculate(result.OriginalSystem, result.OriginalSystem.PrimaryWavelength.ValueMicrons);
+                var splitB = buchdahlCalc.Calculate(result.SplitSystem, result.SplitSystem.PrimaryWavelength.ValueMicrons);
+                double origBEfl = Math.Abs(origB.Efl) > 1e-6 ? origB.Efl : 1.0;
+                double splitBEfl = Math.Abs(splitB.Efl) > 1e-6 ? splitB.Efl : 1.0;
+
+                Console.WriteLine($"\n  Buchdahl 5th-order (/EFL):");
+                Console.WriteLine("  Aberration            Original        Split           Change");
+                Console.WriteLine("  ─────────────────────────────────────────────────────────────");
+                PrintAberrationRow("Ap (Spherical)", origB.ApEffective / origBEfl, splitB.ApEffective / splitBEfl);
+                PrintAberrationRow("Aq (Coma)", origB.AqEffective / origBEfl, splitB.AqEffective / splitBEfl);
+                PrintAberrationRow("Bp (Oblique Sph)", origB.BpEffective / origBEfl, splitB.BpEffective / splitBEfl);
+                PrintAberrationRow("Bq (Ellip. Coma)", origB.BqEffective / origBEfl, splitB.BqEffective / splitBEfl);
+                PrintAberrationRow("Cp (Astigmatism)", origB.CpEffective / origBEfl, splitB.CpEffective / splitBEfl);
+                PrintAberrationRow("Cq (Distortion)", origB.CqEffective / origBEfl, splitB.CqEffective / splitBEfl);
+                PrintAberrationRow("Total magnitude", origB.TotalMagnitude / origBEfl, splitB.TotalMagnitude / splitBEfl);
+                Console.WriteLine("  ─────────────────────────────────────────────────────────────");
+            }
+            catch { }
 
             Console.WriteLine($"\n  Merit Function (weighted sum):");
             Console.WriteLine($"    Original: {result.OriginalMeritFunction:E4}");
@@ -961,6 +1049,105 @@ class Program
                     Console.WriteLine($"\nNo splittable elements found. All elements are negative, in groups, or have aspheric surfaces.");
                     Console.ResetColor();
                 }
+            }
+
+            // Seidel per-surface analysis
+            try
+            {
+                var seidelCalc = new SeidelCalculator();
+                var seidel = seidelCalc.Calculate(system, wavelength);
+
+                Console.WriteLine($"\nSeidel 3rd-Order Aberrations:");
+                Console.WriteLine($"  {"Surf",4}  {"S1",12}  {"S2",12}  {"S3",12}  {"S4",12}  {"S5",12}  {"CL",12}  {"CT",12}");
+                Console.WriteLine($"  {"────",4}  {"────────────",12}  {"────────────",12}  {"────────────",12}  {"────────────",12}  {"────────────",12}  {"────────────",12}  {"────────────",12}");
+                foreach (var sc in seidel.SurfaceCoefficients)
+                {
+                    Console.WriteLine($"  {sc.SurfaceIndex,4}  {sc.S1,12:E3}  {sc.S2,12:E3}  {sc.S3,12:E3}  {sc.S4,12:E3}  {sc.S5,12:E3}  {sc.CL,12:E3}  {sc.CT,12:E3}");
+                }
+                Console.WriteLine($"  {"Sum",4}  {seidel.S1,12:E3}  {seidel.S2,12:E3}  {seidel.S3,12:E3}  {seidel.S4,12:E3}  {seidel.S5,12:E3}  {seidel.CL,12:E3}  {seidel.CT,12:E3}");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"\nSeidel 3rd-order: calculation failed ({ex.Message})");
+            }
+
+            // Buchdahl 5th-order analysis
+            try
+            {
+                var buchdahlCalc = new BuchdahlCalculator();
+                var buchdahl = buchdahlCalc.Calculate(system, wavelength);
+
+                double bEfl = Math.Abs(buchdahl.Efl) > 1e-6 ? buchdahl.Efl : 1.0;
+                Console.WriteLine($"\nBuchdahl 5th-Order Aberrations (EFL={bEfl:F2} mm):");
+                Console.WriteLine($"  Effective coefficients (P={buchdahl.P:F4}):");
+                Console.WriteLine($"  {"Coeff",-28} {"Raw",12} {"/ EFL",12}");
+                Console.WriteLine($"  {"─────────────────────────────",28} {"────────────",12} {"────────────",12}");
+                Console.WriteLine($"  {"Ap_eff (Spherical)",-28} {buchdahl.ApEffective,12:E3} {buchdahl.ApEffective / bEfl,12:E3}");
+                Console.WriteLine($"  {"Aq_eff (Coma)",-28} {buchdahl.AqEffective,12:E3} {buchdahl.AqEffective / bEfl,12:E3}");
+                Console.WriteLine($"  {"Bp_eff (Oblique Sph)",-28} {buchdahl.BpEffective,12:E3} {buchdahl.BpEffective / bEfl,12:E3}");
+                Console.WriteLine($"  {"Bq_eff (Elliptical Coma)",-28} {buchdahl.BqEffective,12:E3} {buchdahl.BqEffective / bEfl,12:E3}");
+                Console.WriteLine($"  {"Cp_eff (Astigmatism)",-28} {buchdahl.CpEffective,12:E3} {buchdahl.CpEffective / bEfl,12:E3}");
+                Console.WriteLine($"  {"Cq_eff (Distortion)",-28} {buchdahl.CqEffective,12:E3} {buchdahl.CqEffective / bEfl,12:E3}");
+                Console.WriteLine($"  {"Total magnitude",-28} {buchdahl.TotalMagnitude,12:E3} {buchdahl.TotalMagnitude / bEfl,12:E3}");
+
+                // Total 5th-order = Primary + Secondary
+                double P = buchdahl.P;
+                double apTotal = buchdahl.Ap + buchdahl.S1p + P * (buchdahl.ApBar + buchdahl.S1pBar);
+                double bpTotal = buchdahl.Bp + buchdahl.S2p + P * (buchdahl.BpBar + buchdahl.S2pBar);
+                double cpTotal = buchdahl.Cp + buchdahl.S3p + P * (buchdahl.CpBar + buchdahl.S3pBar);
+                double aqTotal = buchdahl.Aq + buchdahl.S4p + P * (buchdahl.AqBar + buchdahl.S4pBar);
+                double bqTotal = buchdahl.Bq + buchdahl.S5p + P * (buchdahl.BqBar + buchdahl.S5pBar);
+                double cqTotal = buchdahl.Cq + buchdahl.S6p + P * (buchdahl.CqBar + buchdahl.S6pBar);
+                double totalMag = Math.Sqrt(apTotal * apTotal + bpTotal * bpTotal + cpTotal * cpTotal +
+                                            aqTotal * aqTotal + bqTotal * bqTotal + cqTotal * cqTotal);
+                Console.WriteLine($"\n  Total (Primary + Secondary):");
+                Console.WriteLine($"  {"Ap_total (Spherical)",-28} {apTotal,12:E3} {apTotal / bEfl,12:E3}");
+                Console.WriteLine($"  {"Aq_total (Coma)",-28} {aqTotal,12:E3} {aqTotal / bEfl,12:E3}");
+                Console.WriteLine($"  {"Bp_total (Oblique Sph)",-28} {bpTotal,12:E3} {bpTotal / bEfl,12:E3}");
+                Console.WriteLine($"  {"Bq_total (Elliptical Coma)",-28} {bqTotal,12:E3} {bqTotal / bEfl,12:E3}");
+                Console.WriteLine($"  {"Cp_total (Astigmatism)",-28} {cpTotal,12:E3} {cpTotal / bEfl,12:E3}");
+                Console.WriteLine($"  {"Cq_total (Distortion)",-28} {cqTotal,12:E3} {cqTotal / bEfl,12:E3}");
+                Console.WriteLine($"  {"Total magnitude",-28} {totalMag,12:E3} {totalMag / bEfl,12:E3}");
+
+                if (buchdahl.SurfaceContributions.Count > 0)
+                {
+                    Console.WriteLine($"\n  Per-surface primary contributions:");
+                    Console.WriteLine($"  {"Surf",4}  {"Ap",12}  {"Bp",12}  {"Cp",12}  {"Aq",12}  {"Bq",12}  {"Cq",12}");
+                    Console.WriteLine($"  {"────",4}  {"────────────",12}  {"────────────",12}  {"────────────",12}  {"────────────",12}  {"────────────",12}  {"────────────",12}");
+                    foreach (var sc in buchdahl.SurfaceContributions)
+                    {
+                        Console.WriteLine($"  {sc.SurfaceIndex,4}  {sc.Ap,12:E3}  {sc.Bp,12:E3}  {sc.Cp,12:E3}  {sc.Aq,12:E3}  {sc.Bq,12:E3}  {sc.Cq,12:E3}");
+                    }
+                    Console.WriteLine($"  {"Sum",4}  {buchdahl.Ap,12:E3}  {buchdahl.Bp,12:E3}  {buchdahl.Cp,12:E3}  {buchdahl.Aq,12:E3}  {buchdahl.Bq,12:E3}  {buchdahl.Cq,12:E3}");
+
+                    Console.WriteLine($"\n  Per-surface secondary intrinsic (effective):");
+                    Console.WriteLine($"  {"Surf",4}  {"Ap",12}  {"Bp",12}  {"Cp",12}  {"Aq",12}  {"Bq",12}  {"Cq",12}");
+                    Console.WriteLine($"  {"────",4}  {"────────────",12}  {"────────────",12}  {"────────────",12}  {"────────────",12}  {"────────────",12}  {"────────────",12}");
+                    double sumIA = 0, sumIB = 0, sumIC = 0, sumIAq = 0, sumIBq = 0, sumICq = 0;
+                    foreach (var sc in buchdahl.SurfaceContributions)
+                    {
+                        Console.WriteLine($"  {sc.SurfaceIndex,4}  {sc.IntrinsicAp,12:E3}  {sc.IntrinsicBp,12:E3}  {sc.IntrinsicCp,12:E3}  {sc.IntrinsicAq,12:E3}  {sc.IntrinsicBq,12:E3}  {sc.IntrinsicCq,12:E3}");
+                        sumIA += sc.IntrinsicAp; sumIB += sc.IntrinsicBp; sumIC += sc.IntrinsicCp;
+                        sumIAq += sc.IntrinsicAq; sumIBq += sc.IntrinsicBq; sumICq += sc.IntrinsicCq;
+                    }
+                    Console.WriteLine($"  {"Sum",4}  {sumIA,12:E3}  {sumIB,12:E3}  {sumIC,12:E3}  {sumIAq,12:E3}  {sumIBq,12:E3}  {sumICq,12:E3}");
+
+                    Console.WriteLine($"\n  Per-surface secondary induced (effective):");
+                    Console.WriteLine($"  {"Surf",4}  {"Ap",12}  {"Bp",12}  {"Cp",12}  {"Aq",12}  {"Bq",12}  {"Cq",12}");
+                    Console.WriteLine($"  {"────",4}  {"────────────",12}  {"────────────",12}  {"────────────",12}  {"────────────",12}  {"────────────",12}  {"────────────",12}");
+                    double sumDA = 0, sumDB = 0, sumDC = 0, sumDAq = 0, sumDBq = 0, sumDCq = 0;
+                    foreach (var sc in buchdahl.SurfaceContributions)
+                    {
+                        Console.WriteLine($"  {sc.SurfaceIndex,4}  {sc.InducedAp,12:E3}  {sc.InducedBp,12:E3}  {sc.InducedCp,12:E3}  {sc.InducedAq,12:E3}  {sc.InducedBq,12:E3}  {sc.InducedCq,12:E3}");
+                        sumDA += sc.InducedAp; sumDB += sc.InducedBp; sumDC += sc.InducedCp;
+                        sumDAq += sc.InducedAq; sumDBq += sc.InducedBq; sumDCq += sc.InducedCq;
+                    }
+                    Console.WriteLine($"  {"Sum",4}  {sumDA,12:E3}  {sumDB,12:E3}  {sumDC,12:E3}  {sumDAq,12:E3}  {sumDBq,12:E3}  {sumDCq,12:E3}");
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"\nBuchdahl 5th-order: calculation failed ({ex.Message})");
             }
 
             // List surfaces
@@ -1137,8 +1324,12 @@ class Program
                 Console.WriteLine($"\nNote: Only {system.Wavelengths.Count} wavelength defined - chromatic aberrations auto-disabled.");
             }
 
-            // Use same aberration weights as split optimizer
-            var weights = includeChromatic ? AberrationWeights.Default : AberrationWeights.DefaultMonochromatic;
+            // Use current weights, adjusting chromatic setting
+            var weights = _currentWeights;
+            if (!includeChromatic)
+            {
+                weights = weights.WithoutChromatic();
+            }
 
             // Run optimization
             Console.WriteLine($"\nRunning glass optimization...");
@@ -1152,6 +1343,12 @@ class Program
             else
             {
                 Console.WriteLine($"  Chromatic aberrations: disabled");
+            }
+            if (weights.IncludeBuchdahl)
+            {
+                Console.WriteLine($"  Buchdahl weights: WBSph={weights.WBSph}, WBCma={weights.WBCma}, " +
+                                  $"WBObl={weights.WBObl}, WBEll={weights.WBEll}, " +
+                                  $"WBAst={weights.WBAst}, WBDst={weights.WBDst}");
             }
             if (eflTolerancePercent > 0)
                 Console.WriteLine($"  EFL tolerance: {eflTolerancePercent:F1}%");

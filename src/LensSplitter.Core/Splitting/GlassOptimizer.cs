@@ -1,3 +1,4 @@
+using LensSplitter.Core.Aberrations;
 using LensSplitter.Core.Models;
 using LensSplitter.Core.Paraxial;
 
@@ -12,6 +13,7 @@ public class GlassOptimizer
     private readonly ParaxialRayTracer _tracer = new();
     private readonly ChromaticAberrationCalculator _chromaCalc = new();
     private readonly SeidelCalculator _seidelCalc = new();
+    private readonly BuchdahlCalculator _buchdahlCalc = new();
     private readonly OptimizingSplitter _splitter = new();
     private Random _random = new();
 
@@ -138,13 +140,18 @@ public class GlassOptimizer
         var originalChromatic = _chromaCalc.Calculate(system, settings.FieldAngleForLateralColor);
         double originalS1 = CalculateElementS1(originalElement, entrancePupilRadius, wavelength);
 
-        // Calculate full Seidel aberrations for original system
+        // Calculate full Seidel + Buchdahl aberrations for original system
         SeidelResult? originalSeidel = null;
+        BuchdahlResult? originalBuchdahl = null;
         double originalMeritFunction = double.MaxValue;
         try
         {
             originalSeidel = _seidelCalc.Calculate(system, wavelength, settings.FieldAngleForLateralColor);
-            originalMeritFunction = SeidelCalculator.CalculateMeritFunction(originalSeidel, settings.AberrationWeights);
+            if (settings.AberrationWeights.IncludeBuchdahl && settings.AberrationWeights.HasNonZeroBuchdahlWeights)
+            {
+                try { originalBuchdahl = _buchdahlCalc.Calculate(system, wavelength); } catch { }
+            }
+            originalMeritFunction = SeidelCalculator.CalculateMeritFunction(originalSeidel, settings.AberrationWeights, originalBuchdahl);
         }
         catch
         {
@@ -444,6 +451,7 @@ public class GlassOptimizer
         // Recalculate aberrations with the new glasses
         ChromaticAberrationResult? chromaticResult = null;
         SeidelResult? seidelResult = null;
+        BuchdahlResult? buchdahlResult = null;
         try
         {
             chromaticResult = _chromaCalc.Calculate(splitSystem, settings.FieldAngleForLateralColor);
@@ -453,6 +461,19 @@ public class GlassOptimizer
         {
             // Skip if calculation fails
             return null;
+        }
+
+        // Compute Buchdahl if weights are set
+        if (settings.AberrationWeights.IncludeBuchdahl && settings.AberrationWeights.HasNonZeroBuchdahlWeights)
+        {
+            try
+            {
+                buchdahlResult = _buchdahlCalc.Calculate(splitSystem, wavelength);
+            }
+            catch
+            {
+                // Proceed without Buchdahl if it fails
+            }
         }
 
         double n1 = glass1.GetRefractiveIndex(wavelength);
@@ -480,8 +501,9 @@ public class GlassOptimizer
             EstimatedLongitudinalColor = 0,
             ChromaticResult = chromaticResult,
             SeidelResult = seidelResult,
+            BuchdahlResult = buchdahlResult,
             SplitMeritFunction = seidelResult != null
-                ? SeidelCalculator.CalculateMeritFunction(seidelResult, settings.AberrationWeights)
+                ? SeidelCalculator.CalculateMeritFunction(seidelResult, settings.AberrationWeights, buchdahlResult)
                 : double.MaxValue,
             SplitSystem = splitSystem,
             EffectivePower = splitResult.OptimizedResult.Phi1 + splitResult.OptimizedResult.Phi2,
@@ -799,7 +821,8 @@ public class GlassOptimizer
         // If we have full Seidel results for both, use weighted merit function
         if (candidate.SeidelResult != null && originalSeidel != null && originalMeritFunction < double.MaxValue)
         {
-            double candidateMeritFunction = SeidelCalculator.CalculateMeritFunction(candidate.SeidelResult, settings.AberrationWeights);
+            double candidateMeritFunction = SeidelCalculator.CalculateMeritFunction(
+                candidate.SeidelResult, settings.AberrationWeights, candidate.BuchdahlResult);
             candidate.SplitMeritFunction = candidateMeritFunction;
 
             // Merit is how much better the split is (higher = better)
@@ -902,6 +925,7 @@ public class GlassCombinationResult
     public double EstimatedLongitudinalColor { get; set; }
     public ChromaticAberrationResult? ChromaticResult { get; set; }
     public SeidelResult? SeidelResult { get; set; }
+    public BuchdahlResult? BuchdahlResult { get; set; }
     public double SplitMeritFunction { get; set; }
     public OpticalSystem SplitSystem { get; set; } = null!;
     public double EffectivePower { get; set; }

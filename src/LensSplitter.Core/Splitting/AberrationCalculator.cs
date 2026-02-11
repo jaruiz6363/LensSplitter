@@ -35,7 +35,7 @@ public class AberrationCalculator
         double y4 = Math.Pow(rayHeight, 4);
         double c3 = Math.Pow(c, 3);
 
-        // ΔS₁ = -(n' - n) · K · c³ · y⁴
+        // ΔS₁ = -(n' - n) · K · c³ · y⁴  (thin-lens convention)
         return -(nAfter - nBefore) * conic * c3 * y4;
     }
 

@@ -11,7 +11,10 @@ Power-preserving splitting is an optical design technique for reducing spherical
 - **File Parsing**: Support for ZEMAX ZMX and Optiland JSON formats
 - **Glass Catalogs**: AGF glass catalog support with Schott and Sellmeier1 dispersion models
 - **Paraxial Ray Tracing**: Marginal and chief ray tracing with EFL/BFL calculations
+- **Seidel Aberration Analysis**: 3rd-order aberrations (S1-S5) with per-surface breakdown
+- **Buchdahl 5th-Order Aberrations**: 6 primary coefficients (Ap, Bp, Cp, Aq, Bq, Cq) with per-surface contributions, EFL-normalized
 - **Power-Preserving Splitting**: Split lens elements with power-preserving algorithm
+- **Configurable Merit Function**: Weighted Seidel + Buchdahl/EFL optimization with interactive weight configuration
 - **Glass Optimization**: Try different glass combinations to minimize aberrations
 - **Multiple Interfaces**: CLI, REST API, and MCP Server
 
@@ -157,6 +160,49 @@ Optimal shape:     X_opt = -2(n² - 1) / (n + 2)  [for min SA at infinite conjug
 H = n(u_m * y_c - u_c * y_m)
 ```
 
+### Conic Surfaces
+
+```
+Surface sag:    z = c·r² / (1 + √(1-(1+K)c²r²))
+Deformation:    Δz = (K/8)·c³·r⁴ + (K(2+K)/16)·c⁵·r⁶ + ...
+Seidel a4:      a4 = K·(n'-n)·c³       (4th-order, implemented)
+Buchdahl a6:    a6 = K·(2+K)·(n'-n)·c⁵  (6th-order, not yet implemented)
+```
+
+K=0 is a sphere, K=-1 is a paraboloid, K<-1 is a hyperboloid.
+
+**Seidel (complete):** The a4 deformation coefficient corrects all five Seidel sums (S1-S5) with the standard h/h-bar power pattern: ΔS1 = a4·h⁴, ΔS2 = a4·h³·h-bar, etc.
+
+**Buchdahl primary (partial):** The a4 coefficient corrects the 5th-order primary terms at the Seidel level. Cross-surface interactions are captured through prefix sums. However, two intrinsic 5th-order contributions are not yet implemented:
+
+- Within-surface aspherical-spherical cross-term (a4 deformation x the surface's own Gaussian properties)
+- Direct 6th-order aspherical contribution (a6)
+
+These missing terms affect the secondary (intrinsic) portion of the Buchdahl computation. For systems with mild conics (|K| < 1), the impact is small. For extreme conics (|K| >> 1), the displayed Total (Primary + Secondary) may be inaccurate.
+
+### Buchdahl 5th-Order Aberrations
+
+Six primary coefficients computed from EFL-normalized paraxial ray data:
+
+```
+Sagittal:    Ap (spherical), Bp (oblique spherical), Cp (astigmatism)
+Tangential:  Aq (coma), Bq (elliptical coma), Cq (distortion)
+```
+
+Effective coefficients incorporate the stop eccentricity parameter P:
+
+```
+Ap_eff = Ap + P·Āp    (bar coefficients account for stop shift)
+```
+
+### Merit Function
+
+```
+MF = Σ Wi·|Si| + WCL·|CL| + WCT·|CT| + Σ WBj·|Bj_eff| / EFL
+```
+
+Buchdahl terms are normalized by EFL to match the scale of Seidel coefficients.
+
 ## Glass Catalogs
 
 Place AGF files in the `catalogs/` folder relative to the executable for automatic loading. Additional catalogs can be loaded via CLI, API, or MCP tools.
@@ -167,6 +213,10 @@ Place AGF files in the `catalogs/` folder relative to the executable for automat
 LensSplitter/
 ├── src/
 │   ├── LensSplitter.Core/         # Domain models, paraxial tracing, splitting
+│   │   ├── Aberrations/           # Buchdahl 5th-order aberration calculator
+│   │   ├── Models/                # Optical system models
+│   │   ├── Paraxial/              # Ray tracing, Seidel calculations
+│   │   └── Splitting/             # Element splitting, optimization
 │   ├── LensSplitter.Parsing/      # ZMX, Optiland JSON, AGF parsers + exporters
 │   ├── LensSplitter.Visualization/# SVG rendering
 │   ├── LensSplitter.Api/          # REST API (ASP.NET Core)

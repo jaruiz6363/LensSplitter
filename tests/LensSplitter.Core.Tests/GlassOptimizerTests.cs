@@ -21,7 +21,8 @@ public class GlassOptimizerTests
         var settings = new GlassOptimizer.OptimizationSettings
         {
             NumberOfTrials = 50,
-            TopResultsToKeep = 10
+            TopResultsToKeep = 10,
+            OnlyShowImprovements = false
         };
 
         var result = _optimizer.Optimize(system, 0, glasses, settings);
@@ -75,7 +76,8 @@ public class GlassOptimizerTests
         {
             NumberOfTrials = 100,
             TopResultsToKeep = 10,
-            UseAchromaticRatio = true
+            UseAchromaticRatio = true,
+            OnlyShowImprovements = false
         };
 
         var result = _optimizer.Optimize(system, 0, glasses, settings);
@@ -102,7 +104,10 @@ public class GlassOptimizerTests
             CreateGlass("FLINT", 1.62, 36.0)
         };
 
-        var result = _optimizer.Optimize(system, 0, glasses);
+        var result = _optimizer.Optimize(system, 0, glasses, new GlassOptimizer.OptimizationSettings
+        {
+            OnlyShowImprovements = false
+        });
 
         var best = result.BestResult;
         Assert.NotNull(best);
@@ -170,7 +175,8 @@ public class GlassOptimizerTests
         var result = _optimizer.Optimize(system, 0, glasses, new GlassOptimizer.OptimizationSettings
         {
             NumberOfTrials = 50,
-            TopResultsToKeep = 10
+            TopResultsToKeep = 10,
+            OnlyShowImprovements = false
         });
 
         var exporter = new GlassOptimizationExporter();

@@ -1,3 +1,4 @@
+using LensSplitter.Core.Aberrations;
 using LensSplitter.Core.Models;
 using LensSplitter.Core.Paraxial;
 
@@ -125,9 +126,12 @@ public class SeidelCalculator
             fieldType = system.Fields[0].FieldType;
         }
 
-        if (Math.Abs(fieldValue) < 1e-10)
+        // Only default to 1 degree if no fields are defined at all.
+        // If the system explicitly defines field=0 (on-axis), respect it:
+        // chief ray will have zero angle/height, giving S2=S3=S4=S5=0.
+        if (Math.Abs(fieldValue) < 1e-10 && (system.Fields == null || system.Fields.Count == 0))
         {
-            fieldValue = 1.0; // Default 1 degree/mm if no field
+            fieldValue = 1.0; // Default 1 degree if no field definitions
         }
 
         // For display, convert to angle equivalent
@@ -225,7 +229,7 @@ public class SeidelCalculator
             // Change in (u/n)
             double delta_up_np = u_prime / n2 - u / n1;
 
-            // S1: Spherical aberration
+            // S1: Spherical aberration (spherical surface contribution)
             double s1 = -h * A * A * delta_up_np;
 
             // S2: Coma
@@ -242,6 +246,23 @@ public class SeidelCalculator
 
             // S5: Distortion
             double s5 = A_bar_over_A * (s3 + s4);
+
+            // Conic (aspherical) contributions
+            // For a conic surface with constant K, the aspherical deformation adds:
+            //   a4 = K * (n' - n) * c^3  (note: some references include a negative sign,
+            //   but Seidel convention with S1 = -h*A²*Δ(u/n) requires positive K*(n'-n)*c³)
+            //   ΔS1 = a4 * h^4,  ΔS2 = a4 * h^3 * h_bar,  ΔS3 = a4 * h^2 * h_bar^2
+            //   ΔS4 = 0,  ΔS5 = a4 * h * h_bar^3
+            double K = surface.Conic;
+            if (Math.Abs(K) > 1e-12 && Math.Abs(c) > 1e-12)
+            {
+                double a4 = K * (n2 - n1) * c * c * c;
+                s1 += a4 * h * h * h * h;
+                s2 += a4 * h * h * h * h_bar;
+                s3 += a4 * h * h * h_bar * h_bar;
+                // s4 unchanged (Petzval unaffected by asphericity)
+                s5 += a4 * h * h_bar * h_bar * h_bar;
+            }
 
             // Chromatic aberrations
             double cl = 0, ct = 0;
@@ -327,16 +348,32 @@ public class SeidelCalculator
     /// </summary>
     /// <param name="result">The Seidel calculation result.</param>
     /// <param name="weights">Aberration weights.</param>
+    /// <param name="buchdahl">Optional Buchdahl 5th-order result. When provided and weights are non-zero, adds Buchdahl terms.</param>
     /// <returns>Weighted merit function value.</returns>
-    public static double CalculateMeritFunction(SeidelResult result, AberrationWeights weights)
+    public static double CalculateMeritFunction(SeidelResult result, AberrationWeights weights, BuchdahlResult? buchdahl = null)
     {
-        return weights.W1 * Math.Abs(result.S1) +
+        double merit = weights.W1 * Math.Abs(result.S1) +
                weights.W2 * Math.Abs(result.S2) +
                weights.W3 * Math.Abs(result.S3) +
                weights.W4 * Math.Abs(result.S4) +
                weights.W5 * Math.Abs(result.S5) +
                weights.WCL * Math.Abs(result.CL) +
                weights.WCT * Math.Abs(result.CT);
+
+        if (buchdahl != null && weights.IncludeBuchdahl && weights.HasNonZeroBuchdahlWeights)
+        {
+            // Buchdahl coefficients are computed in EFL-normalized coordinates.
+            // Divide by EFL to bring them onto the same scale as Seidel coefficients.
+            double eflNorm = Math.Abs(buchdahl.Efl) > 1e-6 ? Math.Abs(buchdahl.Efl) : 1.0;
+            merit += (weights.WBSph * Math.Abs(buchdahl.ApEffective) +
+                      weights.WBCma * Math.Abs(buchdahl.AqEffective) +
+                      weights.WBObl * Math.Abs(buchdahl.BpEffective) +
+                      weights.WBEll * Math.Abs(buchdahl.BqEffective) +
+                      weights.WBAst * Math.Abs(buchdahl.CpEffective) +
+                      weights.WBDst * Math.Abs(buchdahl.CqEffective)) / eflNorm;
+        }
+
+        return merit;
     }
 
     private static double GetMaxFieldValue(OpticalSystem system, out FieldType fieldType)
@@ -481,9 +518,9 @@ public class AberrationWeights
     public double W1 { get; set; } = 1.0;
 
     /// <summary>
-    /// Weight for coma (S2). Default 1.5 - coma is often more visually objectionable.
+    /// Weight for coma (S2).
     /// </summary>
-    public double W2 { get; set; } = 1.5;
+    public double W2 { get; set; } = 1.0;
 
     /// <summary>
     /// Weight for astigmatism (S3).
@@ -496,10 +533,9 @@ public class AberrationWeights
     public double W4 { get; set; } = 1.0;
 
     /// <summary>
-    /// Weight for distortion (S5). Default 0.2 - distortion is often less critical
-    /// for imaging quality and can fight with coma optimization.
+    /// Weight for distortion (S5).
     /// </summary>
-    public double W5 { get; set; } = 0.2;
+    public double W5 { get; set; } = 0.0;
 
     /// <summary>
     /// Weight for longitudinal (axial) chromatic aberration.
@@ -520,8 +556,43 @@ public class AberrationWeights
     public bool IncludeChromatic { get; set; } = true;
 
     /// <summary>
-    /// Creates default weights optimized for image quality (coma weighted higher, distortion lower).
-    /// Includes chromatic aberrations by default.
+    /// Whether Buchdahl 5th-order aberrations are included in the merit function.
+    /// </summary>
+    public bool IncludeBuchdahl { get; set; } = true;
+
+    /// <summary>
+    /// Weight for Buchdahl 5th-order spherical aberration (Ap).
+    /// </summary>
+    public double WBSph { get; set; } = 1.0;
+
+    /// <summary>
+    /// Weight for Buchdahl 5th-order coma (Aq).
+    /// </summary>
+    public double WBCma { get; set; } = 1.0;
+
+    /// <summary>
+    /// Weight for Buchdahl 5th-order oblique spherical aberration (Bp).
+    /// </summary>
+    public double WBObl { get; set; } = 1.0;
+
+    /// <summary>
+    /// Weight for Buchdahl 5th-order elliptical coma (Bq).
+    /// </summary>
+    public double WBEll { get; set; } = 1.0;
+
+    /// <summary>
+    /// Weight for Buchdahl 5th-order astigmatism (Cp).
+    /// </summary>
+    public double WBAst { get; set; } = 1.0;
+
+    /// <summary>
+    /// Weight for Buchdahl 5th-order distortion (Cq).
+    /// </summary>
+    public double WBDst { get; set; } = 0.0;
+
+    /// <summary>
+    /// Creates default weights: all non-chromatic weights 1.0, distortion 0.0.
+    /// Includes both chromatic and Buchdahl aberrations by default.
     /// </summary>
     public static AberrationWeights Default => new();
 
@@ -531,20 +602,15 @@ public class AberrationWeights
     /// </summary>
     public static AberrationWeights DefaultMonochromatic => new()
     {
-        W1 = 1.0,
-        W2 = 1.5,
-        W3 = 1.0,
-        W4 = 1.0,
-        W5 = 0.2,
         WCL = 0.0,
         WCT = 0.0,
         IncludeChromatic = false
     };
 
     /// <summary>
-    /// Creates weights with distortion set to zero.
+    /// Creates weights with distortion set to zero (both Seidel and Buchdahl).
     /// </summary>
-    public static AberrationWeights NoDistortion => new() { W5 = 0.0 };
+    public static AberrationWeights NoDistortion => new() { W5 = 0.0, WBDst = 0.0 };
 
     /// <summary>
     /// Creates equal weights for all Seidel aberrations (no chromatic).
@@ -562,7 +628,7 @@ public class AberrationWeights
     };
 
     /// <summary>
-    /// Creates weights focusing only on spherical aberration.
+    /// Creates weights focusing only on spherical aberration (3rd and 5th order).
     /// </summary>
     public static AberrationWeights SphericalOnly => new()
     {
@@ -573,7 +639,13 @@ public class AberrationWeights
         W5 = 0.0,
         WCL = 0.0,
         WCT = 0.0,
-        IncludeChromatic = false
+        IncludeChromatic = false,
+        WBSph = 1.0,
+        WBCma = 0.0,
+        WBObl = 0.0,
+        WBEll = 0.0,
+        WBAst = 0.0,
+        WBDst = 0.0
     };
 
     /// <summary>
@@ -588,15 +660,33 @@ public class AberrationWeights
         W5 = W5,
         WCL = 0.0,
         WCT = 0.0,
-        IncludeChromatic = false
+        IncludeChromatic = false,
+        IncludeBuchdahl = IncludeBuchdahl,
+        WBSph = WBSph,
+        WBCma = WBCma,
+        WBObl = WBObl,
+        WBEll = WBEll,
+        WBAst = WBAst,
+        WBDst = WBDst
     };
+
+    /// <summary>
+    /// Returns true if any Buchdahl weight is non-zero.
+    /// </summary>
+    public bool HasNonZeroBuchdahlWeights =>
+        WBSph != 0.0 || WBCma != 0.0 || WBObl != 0.0 ||
+        WBEll != 0.0 || WBAst != 0.0 || WBDst != 0.0;
 
     public override string ToString()
     {
+        var sb = new System.Text.StringBuilder();
+        sb.Append($"W1={W1}, W2={W2}, W3={W3}, W4={W4}, W5={W5}");
         if (IncludeChromatic)
-        {
-            return $"W1={W1}, W2={W2}, W3={W3}, W4={W4}, W5={W5}, WCL={WCL}, WCT={WCT}";
-        }
-        return $"W1={W1}, W2={W2}, W3={W3}, W4={W4}, W5={W5} (no chromatic)";
+            sb.Append($", WCL={WCL}, WCT={WCT}");
+        else
+            sb.Append(" (no chromatic)");
+        if (IncludeBuchdahl)
+            sb.Append($", WBSph={WBSph}, WBCma={WBCma}, WBObl={WBObl}, WBEll={WBEll}, WBAst={WBAst}, WBDst={WBDst}");
+        return sb.ToString();
     }
 }

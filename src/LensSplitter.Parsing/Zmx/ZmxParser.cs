@@ -149,6 +149,22 @@ public class ZmxParser
                         currentSurface.GlassName = null;
                         currentSurface.Glass = null;
                     }
+                    else if (glassName.StartsWith("___", StringComparison.OrdinalIgnoreCase) && tokens.Length >= 5)
+                    {
+                        // Model glass (e.g. ___BLANK): GLAS name status mil_number Nd Vd ...
+                        // Create ideal glass directly from Nd value
+                        if (double.TryParse(tokens[4], System.Globalization.NumberStyles.Float,
+                            System.Globalization.CultureInfo.InvariantCulture, out double nd) && nd > 1.0)
+                        {
+                            currentSurface.GlassName = $"MODEL_{nd:F6}";
+                            currentSurface.Glass = Core.Models.Glass.Ideal(nd);
+                            currentSurface.Glass.Name = $"MODEL_{nd:F6}";
+                        }
+                        else
+                        {
+                            currentSurface.GlassName = glassName;
+                        }
+                    }
                     else
                     {
                         currentSurface.GlassName = glassName;
@@ -509,6 +525,10 @@ public class ZmxParser
         {
             if (!string.IsNullOrEmpty(surface.GlassName))
             {
+                // Skip surfaces that already have glass resolved (e.g. model glasses)
+                if (surface.Glass != null)
+                    continue;
+
                 surface.Glass = ResolveGlass(surface.GlassName);
 
                 if (surface.Glass == null)

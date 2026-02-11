@@ -116,9 +116,9 @@ public class SeidelCalculatorTests
         // Act
         var mf = SeidelCalculator.CalculateMeritFunction(result, weights);
 
-        // Assert - Default weights: W1=1.0, W2=1.5, W3=1.0, W4=1.0, W5=0.2, WCL=1.0, WCT=1.0
-        // MF = 1*1 + 1.5*2 + 1*3 + 1*4 + 0.2*5 + 1*0.1 + 1*0.2 = 1 + 3 + 3 + 4 + 1 + 0.1 + 0.2 = 12.3
-        Assert.Equal(12.3, mf, 0.001);
+        // Assert - Default weights: W1=1.0, W2=1.0, W3=1.0, W4=1.0, W5=0.0, WCL=1.0, WCT=1.0
+        // MF = 1*1 + 1*2 + 1*3 + 1*4 + 0*5 + 1*0.1 + 1*0.2 = 1 + 2 + 3 + 4 + 0 + 0.1 + 0.2 = 10.3
+        Assert.Equal(10.3, mf, 0.001);
     }
 
     [Fact]
@@ -140,9 +140,9 @@ public class SeidelCalculatorTests
         // Act
         var mf = SeidelCalculator.CalculateMeritFunction(result, weights);
 
-        // Assert - NoDistortion: W1=1.0, W2=1.5, W3=1.0, W4=1.0, W5=0, WCL=1.0, WCT=1.0
-        // MF = 1*1 + 1.5*2 + 1*3 + 1*4 + 0*5 + 1*0.1 + 1*0.2 = 1 + 3 + 3 + 4 + 0 + 0.1 + 0.2 = 11.3
-        Assert.Equal(11.3, mf, 0.001);
+        // Assert - NoDistortion: W1=1.0, W2=1.0, W3=1.0, W4=1.0, W5=0, WCL=1.0, WCT=1.0
+        // MF = 1*1 + 1*2 + 1*3 + 1*4 + 0*5 + 1*0.1 + 1*0.2 = 1 + 2 + 3 + 4 + 0 + 0.1 + 0.2 = 10.3
+        Assert.Equal(10.3, mf, 0.001);
     }
 
     [Fact]
@@ -174,10 +174,10 @@ public class SeidelCalculatorTests
         var weights = AberrationWeights.Default;
 
         Assert.Equal(1.0, weights.W1);  // Spherical
-        Assert.Equal(1.5, weights.W2);  // Coma - weighted higher
+        Assert.Equal(1.0, weights.W2);  // Coma
         Assert.Equal(1.0, weights.W3);  // Astigmatism
         Assert.Equal(1.0, weights.W4);  // Petzval
-        Assert.Equal(0.2, weights.W5);  // Distortion - weighted lower
+        Assert.Equal(0.0, weights.W5);  // Distortion - zero
     }
 
     [Fact]
@@ -198,7 +198,7 @@ public class SeidelCalculatorTests
         var weights = AberrationWeights.NoDistortion;
 
         Assert.Equal(1.0, weights.W1);
-        Assert.Equal(1.5, weights.W2);  // Still has higher coma weight
+        Assert.Equal(1.0, weights.W2);  // Coma
         Assert.Equal(1.0, weights.W3);
         Assert.Equal(1.0, weights.W4);
         Assert.Equal(0.0, weights.W5);  // Zero distortion

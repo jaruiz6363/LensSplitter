@@ -373,8 +373,6 @@ public class ParaxialRayTracer
 
         // Get max field value
         double fieldValue = GetFieldValue(field);
-        if (fieldValue < 1e-12)
-            fieldValue = 0.1; // Minimum field to avoid degenerate case
 
         double y0, nu0;
 

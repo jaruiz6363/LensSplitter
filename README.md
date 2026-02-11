@@ -1,15 +1,17 @@
 # LensSplitter
 
-Power-preserving lens element splitting with Seidel aberration optimization.
+Power-preserving lens element splitting with Seidel and Buchdahl aberration optimization.
 
-LensSplitter takes an optical system, splits a selected lens element into two elements while preserving the total power, and optimizes the split to minimize aberrations. It calculates full system Seidel aberrations (S1-S5) and chromatic aberrations (longitudinal and lateral color).
+LensSplitter takes an optical system, splits a selected lens element into two elements while preserving the total power, and optimizes the split to minimize aberrations. It calculates full system Seidel aberrations (S1-S5), Buchdahl 5th-order aberrations, and chromatic aberrations (longitudinal and lateral color).
 
 ## Features
 
 - **Power-preserving splitting** - Splits a thick lens into two thinner lenses with the same combined power
-- **Seidel aberration analysis** - Calculates S1 (spherical), S2 (coma), S3 (astigmatism), S4 (field curvature), S5 (distortion)
+- **Seidel aberration analysis** - Calculates S1 (spherical), S2 (coma), S3 (astigmatism), S4 (field curvature), S5 (distortion) with per-surface breakdown. Full conic constant support via a4 deformation coefficient
+- **Buchdahl 5th-order aberrations** - Calculates 6 primary coefficients (spherical, oblique spherical, astigmatism, coma, elliptical coma, distortion) with per-surface contributions. Conic support at Seidel level (a4 primary corrections); intrinsic 5th-order aspherical terms (a6, within-surface cross-terms) not yet implemented
 - **Chromatic aberration analysis** - Longitudinal color and lateral color
-- **Merit function optimization** - Finds optimal power ratio and air gap to minimize weighted aberrations
+- **Merit function optimization** - Finds optimal power ratio and air gap to minimize weighted Seidel + Buchdahl aberrations
+- **Configurable weights** - Interactive weight configuration for all Seidel and Buchdahl aberration terms
 - **Glass optimization** - Searches glass catalogs for optimal glass combinations
 - **File format support** - ZEMAX ZMX and Optiland JSON formats
 
@@ -38,7 +40,7 @@ This presents a menu-driven interface:
 
 ```
 ╔══════════════════════════════════════════════════════════════════════╗
-║                         LENSSPLITTER v1.1                            ║
+║                         LENSSPLITTER v1.2                            ║
 ║            Power-Preserving Optical Element Splitting                ║
 ╚══════════════════════════════════════════════════════════════════════╝
 
@@ -51,6 +53,7 @@ Select an option:
   [1] Split - Power-preserving element splitting with optimization
   [2] Info - Analyze optical system
   [3] Glass - Optimize glass selection for split elements
+  [W] Weights - Configure aberration weights
   [S] Settings - Configure paths
   [Q] Quit
 ```
@@ -140,22 +143,37 @@ where d is the air gap between the elements. The power ratio k = φ₁/φ determ
 
 ### Optimization
 
-The optimizer searches for the power ratio and air gap that minimize a weighted merit function while preserving the system EFL:
+The optimizer searches for the power ratio and air gap that minimize a weighted merit function combining Seidel (3rd-order) and Buchdahl (5th-order) aberrations while preserving the system EFL:
 
 ```
 MF = W1·|S1| + W2·|S2| + W3·|S3| + W4·|S4| + W5·|S5| + WCL·|CL| + WCT·|CT|
+   + (WBSph·|Ap_eff| + WBCma·|Aq_eff| + WBObl·|Bp_eff| + WBEll·|Bq_eff| + WBAst·|Cp_eff| + WBDst·|Cq_eff|) / EFL
 ```
 
-**Default weights:**
+Buchdahl coefficients are normalized by EFL to bring them to the same scale as the Seidel coefficients.
+
+**Default Seidel weights:**
 | Weight | Aberration | Default | Notes |
 |--------|-----------|---------|-------|
 | W1 | Spherical (S1) | 1.0 | |
-| W2 | Coma (S2) | 1.5 | Higher weight - coma is visually objectionable |
+| W2 | Coma (S2) | 1.0 | |
 | W3 | Astigmatism (S3) | 1.0 | |
 | W4 | Field Curvature (S4) | 1.0 | |
-| W5 | Distortion (S5) | 0.2 | Lower weight - often less critical |
+| W5 | Distortion (S5) | 0.0 | Often less critical |
 | WCL | Longitudinal Color | 1.0 | Requires multiple wavelengths |
 | WCT | Lateral Color | 1.0 | Requires multiple wavelengths |
+
+**Default Buchdahl weights:**
+| Weight | Aberration | Default | Notes |
+|--------|-----------|---------|-------|
+| WBSph | 5th-order Spherical (Ap) | 1.0 | |
+| WBCma | 5th-order Coma (Aq) | 1.0 | |
+| WBObl | Oblique Spherical (Bp) | 1.0 | |
+| WBEll | Elliptical Coma (Bq) | 1.0 | |
+| WBAst | 5th-order Astigmatism (Cp) | 1.0 | |
+| WBDst | 5th-order Distortion (Cq) | 0.0 | Often less critical |
+
+All weights can be configured interactively using the **W** command. Weights persist for the duration of the session. Set a weight to 0.0 to exclude that term from the merit function.
 
 **EFL Preservation:** The merit function includes a quadratic EFL penalty to maintain the original system focal length:
 
@@ -181,7 +199,7 @@ When no element is specified, LensSplitter analyzes all elements and recommends 
 Score = W1·|S1_element| + W2·|S2_element| + W3·|S3_element|
 ```
 
-This uses the same weights as the optimization merit function (W1=1.0, W2=1.5, W3=1.0), ensuring the element selected for splitting is the one whose splitting most improves overall system performance. Including coma (S2) in the scoring is particularly important for systems like Cooke triplets, where elements far from the stop contribute significant coma that S1-only scoring would miss.
+This uses the same weights as the optimization merit function (W1=1.0, W2=1.0, W3=1.0), ensuring the element selected for splitting is the one whose splitting most improves overall system performance. Including coma (S2) in the scoring is particularly important for systems like Cooke triplets, where elements far from the stop contribute significant coma that S1-only scoring would miss. Buchdahl 5th-order aberrations are not used for element selection because they are system-level quantities that do not decompose cleanly into per-element contributions.
 
 ## Glass Catalogs
 
@@ -227,6 +245,7 @@ In interactive mode, press Enter at the glass prompt to use the default 28 glass
 LensSplitter/
 ├── src/
 │   ├── LensSplitter.Core/       # Core algorithms
+│   │   ├── Aberrations/         # Buchdahl 5th-order aberration calculator
 │   │   ├── Models/              # Optical system models
 │   │   ├── Paraxial/            # Ray tracing, Seidel calculations
 │   │   └── Splitting/           # Element splitting, optimization
@@ -254,6 +273,7 @@ MIT License - see [LICENSE](LICENSE) for details.
 ## References
 
 - Smith, W. J. "Modern Optical Engineering" - Seidel aberration theory
+- Buchdahl, H. A. "Optical Aberration Coefficients" - 5th-order aberration theory
 - Kingslake, R. "Lens Design Fundamentals" - Lens splitting techniques
 - ZEMAX OpticStudio User Manual - File format specification
 - Kramer, H. "Optiland" - https://github.com/HarrisonKramer/optiland
