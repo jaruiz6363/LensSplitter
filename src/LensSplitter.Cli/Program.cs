@@ -20,10 +20,14 @@ public static class Program
     private static string? _merit;
     private static string _formats = "";
 
+    // Set when a command fails, so Main returns 1 without the process-wide Environment.ExitCode.
+    private static int _failed;
+
     public static async Task<int> Main(string[] args)
     {
         CultureInfo.DefaultThreadCurrentCulture = Inv;
         CultureInfo.CurrentCulture = Inv;
+        _failed = 0;
         if (args.Length == 0) return Interactive();
 
         var root = new RootCommand(
@@ -33,7 +37,8 @@ public static class Program
         root.AddCommand(SplitCommand());
         root.AddCommand(GlassCommand());
         root.AddCommand(MeritCommand());
-        return await root.InvokeAsync(args);
+        int code = await root.InvokeAsync(args);
+        return code != 0 ? code : _failed;
     }
 
     // ── Options shared by the commands ────────────────────────────────────────────────────────
@@ -253,7 +258,7 @@ public static class Program
             Console.ForegroundColor = ConsoleColor.Red;
             Console.Error.WriteLine("Error: " + ex.Message);
             Console.ResetColor();
-            Environment.ExitCode = 1;
+            _failed = 1;
         }
     }
 
