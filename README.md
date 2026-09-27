@@ -135,18 +135,66 @@ more than one wavelength the default adds both. Axial colour is a length along t
 the image by about that length times the image-space marginal ray angle u′, so its weight `w` is u′²,
 to count as a spot radius does.
 
-Anything AberrationCalculator's optimiser takes can be added - any of the 37 aberration coefficients
-by name (`B`, `F`, `C`, `Pi`, `E` at third order, `B5` to `E5` at fifth, `B7` and `Tau2` to `Tau20` at
-seventh), real distortion (`DISTF`), rays (`RX` ... `RN`), limits as well as targets:
+### Writing one
+
+Each line is `TYPE, WEIGHT, TAR x, INPUTS` - driven to a target - or `TYPE, WEIGHT, MIN x, INPUTS`,
+`MAX x`, or both: a limit, which costs nothing at all while it is met. Inputs are positional, and
+trailing ones may be left off. `#` starts a comment.
 
 ```
+PRMSA, 1, TAR 0
 B7,    1, TAR 0                 # seventh-order spherical
 DISTF, 1, MIN -1, MAX 1, 1.0    # distortion within one per cent at the full field
 ```
 
+`lenssplitter merit -i <lens> -o <file.mf>` writes the lens's default to start from; pass the file
+back with `--merit` to `split` or `glass`.
+
+### Every operand
+
+Anything AberrationCalculator's optimiser takes:
+
+| Operand | What it is | Inputs |
+|---|---|---|
+| `PRMSA` | Robb's predicted RMS spot radius, over every field and wavelength | none |
+| `B` `F` `C` `Pi` `E` | third-order aberration coefficients: spherical, coma, astigmatism, Petzval, distortion | `surface, wave` |
+| `B5` `F1` `F2` `M1` `M2` `M3` `N1` `N2` `N3` `C5` `Pi5` `E5` | fifth-order coefficients | `surface, wave` |
+| `B7` `Tau2` ... `Tau20` | seventh-order coefficients (`B7` is seventh-order spherical) | `surface, wave` |
+| `AXC` | real axial colour | none |
+| `LCF` | real lateral colour | `hy` |
+| `DISTF` | real distortion, per cent | `hy` |
+| `EFL` | effective focal length | `wave` |
+| `TTL` | total track, first surface to image | none |
+| `EGT` | edge thickness of each glass in a span of surfaces | `surface, surface2` |
+| `EAT` | edge thickness of each air space in a span | `surface, surface2` |
+| `DTRGT` | diameter-to-thickness ratio | `surface, surface2` |
+| `PX` `PY` `PZ` `PL` `PM` `PN` | a paraxial ray's position and direction cosines | `surface, wave, hy, px, py` |
+| `RX` `RY` `RZ` `RL` `RM` `RN` | the same for a real ray | `surface, wave, hy, px, py` |
+| `ASBLT` | the wavefront error a build tolerance would induce | `decentre, tilt, wave` |
+
+- `hy` is a fraction of the full field (0 on axis, 1 at the edge), and `px`, `py` fractions of the
+  pupil radius. `wave` counts from 1 in the lens's own order; left off, it is the primary.
+- An aberration coefficient is the system's total, or - with a surface number - that surface's
+  share: `B, 1, TAR 0, 5` is surface 5's third-order spherical. The coefficient names are those the
+  analysis prints.
+- Coefficients are transverse, in lens units, at the full field and aperture, as the predicted spot
+  combines them.
+
 See AberrationCalculator's [docs/optimizer.md](https://github.com/jaruiz6363/AberrationCalculator/blob/main/docs/optimizer.md)
-for every operand. Whatever the file says, LensSplitter adds the focal length held, and edge
-thickness on the two halves and on the air around them.
+for each operand in full.
+
+### What LensSplitter adds
+
+Whatever the file says, a split also carries:
+
+| Operand | Held at |
+|---|---|
+| `EFL` | the original focal length (made exact afterwards) - unless the file has its own |
+| `EGT` | at least `--min-edge` on the two halves' glass edges |
+| `EAT` | at least `--min-edge` on the air from the space before the split to the one after it, the new gap included |
+
+With `--vary-thickness`, `TTL` too, held at the original track so every later surface stays put -
+unless the file has its own.
 
 ## How a split is made
 
