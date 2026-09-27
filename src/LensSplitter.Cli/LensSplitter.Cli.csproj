@@ -11,12 +11,11 @@
 
   <ItemGroup>
     <ProjectReference Include="..\LensSplitter.Core\LensSplitter.Core.csproj" />
-    <ProjectReference Include="..\LensSplitter.Parsing\LensSplitter.Parsing.csproj" />
-    <ProjectReference Include="..\LensSplitter.Visualization\LensSplitter.Visualization.csproj" />
   </ItemGroup>
 
-  <!-- Copy glass catalogs to output directory -->
+  <!-- AberrationCalculator's glass catalogs: every vendor's, for reading lenses (catalogs/Glass),
+       and the CoreSet28 working set the glass search chooses from (catalogs/Substitution). -->
   <ItemGroup>
-    <None Include="..\..\catalogs\**\*" CopyToOutputDirectory="PreserveNewest" LinkBase="catalogs" />
+    <None Include="..\..\external\AberrationCalculator\catalogs\**\*" CopyToOutputDirectory="PreserveNewest" LinkBase="catalogs" />
   </ItemGroup>
 </Project>

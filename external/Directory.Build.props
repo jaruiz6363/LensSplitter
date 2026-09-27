@@ -1,0 +1,4 @@
+<Project>
+  <!-- Stops MSBuild's upward search here, so LensSplitter's Directory.Build.props (single net8.0,
+       implicit usings) does not reach the AberrationCalculator submodule, whose projects set their own. -->
+</Project>

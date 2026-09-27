@@ -1,279 +1,190 @@
 # LensSplitter
 
-Power-preserving lens element splitting with Seidel and Buchdahl aberration optimization.
+Splits one lens element into two, sharing its power, and optimises the pair.
 
-LensSplitter takes an optical system, splits a selected lens element into two elements while preserving the total power, and optimizes the split to minimize aberrations. It calculates full system Seidel aberrations (S1-S5), Buchdahl 5th-order aberrations, and chromatic aberrations (longitudinal and lateral color).
+A strongly curved element is often where a lens's aberration comes from. Splitting it into two
+weaker elements - the same total power, each bent less - usually lets the design do better. That
+is the idea; LensSplitter finds the best such split, holds the lens's focal length exactly, and
+writes the result back out in the format you gave it.
 
-## Features
+It is built on [AberrationCalculator](https://github.com/jaruiz6363/AberrationCalculator), which
+supplies the optics: the lens model, readers and writers for every format, glass, Seidel sums,
+Buchdahl's aberration coefficients through seventh order, Robb's predicted spot size, and a
+damped-least-squares optimiser with exact derivatives. LensSplitter adds what is its own: choosing
+an element, building its split, and searching for the best one.
 
-- **Power-preserving splitting** - Splits a thick lens into two thinner lenses with the same combined power
-- **Seidel aberration analysis** - Calculates S1 (spherical), S2 (coma), S3 (astigmatism), S4 (field curvature), S5 (distortion) with per-surface breakdown. Full conic constant support via a4 deformation coefficient
-- **Buchdahl 5th-order aberrations** - Calculates 6 primary coefficients (spherical, oblique spherical, astigmatism, coma, elliptical coma, distortion) with per-surface contributions. Conic support at Seidel level (a4 primary corrections); intrinsic 5th-order aspherical terms (a6, within-surface cross-terms) not yet implemented
-- **Chromatic aberration analysis** - Longitudinal color and lateral color
-- **Merit function optimization** - Finds optimal power ratio and air gap to minimize weighted Seidel + Buchdahl aberrations
-- **Configurable weights** - Interactive weight configuration for all Seidel and Buchdahl aberration terms
-- **Glass optimization** - Searches glass catalogs for optimal glass combinations
-- **File format support** - ZEMAX ZMX and Optiland JSON formats
+## What is new in 2.0
 
-## Building
+- **Every format.** Reads and writes ZEMAX `.zmx`, CODE V `.seq`, OSLO `.len`, OPTALIX `.otx`,
+  Optiland `.json` and LensHH-LT `.lhlt`. (1.x read and wrote `.zmx` and Optiland only.)
+- **Aspherics.** Conic and even-asphere surfaces are carried at every order, in the analysis and in
+  the optimisation. An element with a figured face can be split: the figuring stays on its outer
+  face. (1.x read only the conic, and would not split a figured element.)
+- **Robb's predicted spot in the merit function.** The default merit is the RMS spot radius
+  predicted from the aberration coefficients through seventh order, over every field and
+  wavelength - one number that weighs every aberration by what it does to the image. Any
+  coefficient, colour, distortion or ray target can be added in a merit-function file.
+- **The focal length is held exactly**, to about ten digits. (1.x allowed it to drift by up to 3 %.)
+- **A real optimiser.** The split is optimised by AberrationCalculator's optimiser with exact
+  derivatives, from the best of a few hundred starting points, instead of a grid search.
+- **Element choice by the spot.** The element recommended for splitting is the one adding most to
+  the predicted spot. Elements that correct the others are left alone.
+- **Every glass catalog formula**, from AberrationCalculator's glass library (1.x handled two of the
+  thirteen AGF formulas, and gave any other glass an index of 0).
 
-Requires .NET 8.0 SDK or later. See [BUILDING.md](BUILDING.md) for detailed installation instructions.
+## Quick start
 
 ```bash
-git clone <repository>
+git clone --recursive https://github.com/jaruiz6363/LensSplitter.git
 cd LensSplitter
-dotnet restore
-dotnet build
+dotnet build -c Release
+
+# What is in the lens, and which element to split
+dotnet run --project src/LensSplitter.Cli -- analyze -i mylens.zmx
+
+# Split the recommended element, and write the result as ZEMAX and CODE V
+dotnet run --project src/LensSplitter.Cli -- split -i mylens.zmx -o out --format zmx,seq
+
+# Choose the glasses for the two halves
+dotnet run --project src/LensSplitter.Cli -- glass -i mylens.zmx -o out -e 3
 ```
 
-## Usage
+Run with no arguments for an interactive menu. See [BUILDING.md](BUILDING.md) for installing .NET 8
+and publishing a standalone executable.
 
-### Interactive Mode
+## Commands
 
-Run without arguments for interactive mode:
-
-```bash
-dotnet run --project src/LensSplitter.Cli
-```
-
-This presents a menu-driven interface:
+### `analyze`
 
 ```
-╔══════════════════════════════════════════════════════════════════════╗
-║                         LENSSPLITTER v1.2                            ║
-║            Power-Preserving Optical Element Splitting                ║
-╚══════════════════════════════════════════════════════════════════════╝
-
-Current Settings:
-  Input:   (not set)
-  Output:  (not set)
-  Catalog: (not set)
-
-Select an option:
-  [1] Split - Power-preserving element splitting with optimization
-  [2] Info - Analyze optical system
-  [3] Glass - Optimize glass selection for split elements
-  [W] Weights - Configure aberration weights
-  [S] Settings - Configure paths
-  [Q] Quit
+lenssplitter analyze -i <lens> [--catalogs <folder>]
 ```
 
-### Command Line
+The lens's first-order numbers, its predicted spot, and a table of its elements: power, share of
+the predicted spot, Seidel S1-S3, and whether it can be split.
 
-```bash
-# Split with optimization (auto-selects best element)
-dotnet run --project src/LensSplitter.Cli -- split -i input.zmx -o output/
+The **share of the spot** is the element's part of the mean-square predicted spot, with the cross
+terms between elements split evenly, so the shares add up to the whole. A large positive share is an
+element making the spot bigger; a negative one is an element correcting the others. The element
+recommended is the splittable one with the largest positive share.
 
-# Split specific element (1-based index)
-dotnet run --project src/LensSplitter.Cli -- split -i input.zmx -o output/ --element 1
+Not split: a **negative** element, an element **cemented** to another, and one of a closely
+**air-spaced achromatic pair** (opposite powers, Abbe numbers more than 15 apart, less than 2 mm of
+air) - these are corrected as a unit. `--element` overrides the recommendation, not these rules for
+cemented groups.
 
-# Analyze system
-dotnet run --project src/LensSplitter.Cli -- info -i input.zmx
-
-# Glass optimization
-dotnet run --project src/LensSplitter.Cli -- glass -i input.zmx -o output/ --glasses "N-SK16,N-BK7,N-LAK22,N-SSK8"
-```
-
-## Supported File Formats
-
-### Input
-
-| Format | Extension | Description |
-|--------|-----------|-------------|
-| ZEMAX | `.zmx` | ZEMAX OpticStudio lens files (UTF-16 LE) |
-| Optiland | `.json` | Optiland JSON format |
-
-### Output
-
-Both formats are exported for each split result:
-- `split.zmx` - ZEMAX format
-- `split.json` - Optiland JSON format
-
-## Supported Configurations
-
-### Field Types
-- **Angle** - Field angles in degrees (infinite conjugate)
-- **Object Height** - Object heights in mm (finite conjugate)
-
-Unsupported: Paraxial Image Height, Real Image Height 
-
-### Units
-- Lens units must be **millimeters** (MM)
-
-### Aperture
-- **Entrance Pupil Diameter (EPD)** - Only supported aperture type
-
-Unsupported: Image F/#, Object Space NA, Float by Stop Size
-
-## Output Example
+### `split`
 
 ```
-Optimized split of element 1 (SK16)
-  Power ratio: 0.5000 (equal split)
-  Air gap: 0.39 mm
-
-Aberration Comparison (Original → Split):
-╔═══════════════════╦═══════════════╦═══════════════╦═══════════════╗
-║ Aberration        ║ Original      ║ Split         ║ Improvement   ║
-╠═══════════════════╬═══════════════╬═══════════════╬═══════════════╣
-║ S1 (Spherical)    ║  -1.2045E-002 ║  -9.8823E-003 ║     1.22x     ║
-║ S2 (Coma)         ║   5.6721E-003 ║   4.9876E-003 ║     1.14x     ║
-║ S3 (Astigmatism)  ║  -2.3415E-003 ║  -2.1567E-003 ║     1.09x     ║
-║ S4 (Field Curv)   ║  -1.8934E-003 ║  -1.8756E-003 ║     1.01x     ║
-║ S5 (Distortion)   ║   8.4523E-004 ║   7.9812E-004 ║     1.06x     ║
-╠═══════════════════╬═══════════════╬═══════════════╬═══════════════╣
-║ CL (Long. Color)  ║    0.0523 mm  ║    0.0498 mm  ║     1.05x     ║
-║ CT (Lat. Color)   ║    0.0234 mm  ║    0.0221 mm  ║     1.06x     ║
-╠═══════════════════╬═══════════════╬═══════════════╬═══════════════╣
-║ Merit Function    ║    0.0156     ║    0.0134     ║     1.16x     ║
-╚═══════════════════╩═══════════════╩═══════════════╩═══════════════╝
+lenssplitter split -i <lens> -o <folder> [-e <element>] [--merit <file.mf>] [--format <list>|all]
+                   [--min-edge 0.5] [--min-centre 1.0] [--min-gap 0.1] [--iterations 300] [--vary-thickness]
 ```
 
-## How It Works
+Splits the element (`-e`, counted from 1; the recommended one if left off) and optimises the pair.
+Writes, in `<folder>`:
 
-### Power-Preserving Splitting
+| File | |
+|---|---|
+| `<lens>_split<N>.<ext>` | the split lens, in each format asked for (the input's own by default) |
+| `<lens>_split<N>.txt` | the report: the lens, its elements, the split, and a before/after table |
+| `<lens>_split<N>.svg` | the lens and its split, drawn to the same scale, with the paraxial rays |
+| `<lens>_split<N>_glass/` | for Optiland, the glasses' own data (see below) |
 
-Given a thick lens with power φ, LensSplitter finds two lenses with powers φ₁ and φ₂ such that:
+A format that cannot carry the lens says why and is skipped; the others are still written. CODE V,
+OSLO and OPTALIX have no r² aspheric term, so a lens with one is not written in those.
 
-```
-φ = φ₁ + φ₂ - d·φ₁·φ₂
-```
-
-where d is the air gap between the elements. The power ratio k = φ₁/φ determines how power is distributed.
-
-### Optimization
-
-The optimizer searches for the power ratio and air gap that minimize a weighted merit function combining Seidel (3rd-order) and Buchdahl (5th-order) aberrations while preserving the system EFL:
-
-```
-MF = W1·|S1| + W2·|S2| + W3·|S3| + W4·|S4| + W5·|S5| + WCL·|CL| + WCT·|CT|
-   + (WBSph·|Ap_eff| + WBCma·|Aq_eff| + WBObl·|Bp_eff| + WBEll·|Bq_eff| + WBAst·|Cp_eff| + WBDst·|Cq_eff|) / EFL
-```
-
-Buchdahl coefficients are normalized by EFL to bring them to the same scale as the Seidel coefficients.
-
-**Default Seidel weights:**
-| Weight | Aberration | Default | Notes |
-|--------|-----------|---------|-------|
-| W1 | Spherical (S1) | 1.0 | |
-| W2 | Coma (S2) | 1.0 | |
-| W3 | Astigmatism (S3) | 1.0 | |
-| W4 | Field Curvature (S4) | 1.0 | |
-| W5 | Distortion (S5) | 0.0 | Often less critical |
-| WCL | Longitudinal Color | 1.0 | Requires multiple wavelengths |
-| WCT | Lateral Color | 1.0 | Requires multiple wavelengths |
-
-**Default Buchdahl weights:**
-| Weight | Aberration | Default | Notes |
-|--------|-----------|---------|-------|
-| WBSph | 5th-order Spherical (Ap) | 1.0 | |
-| WBCma | 5th-order Coma (Aq) | 1.0 | |
-| WBObl | Oblique Spherical (Bp) | 1.0 | |
-| WBEll | Elliptical Coma (Bq) | 1.0 | |
-| WBAst | 5th-order Astigmatism (Cp) | 1.0 | |
-| WBDst | 5th-order Distortion (Cq) | 0.0 | Often less critical |
-
-All weights can be configured interactively using the **W** command. Weights persist for the duration of the session. Set a weight to 0.0 to exclude that term from the merit function.
-
-**EFL Preservation:** The merit function includes a quadratic EFL penalty to maintain the original system focal length:
+### `glass`
 
 ```
-eflDeviation = |EFL_split - EFL_original| / |EFL_original|
-eflPenalty = 1.0 - (eflDeviation / MaxEflDeviation)²
+lenssplitter glass -i <lens> -o <folder> [-e <element>] [-g <glass,glass,...>] [--refine 8] [--top 3]
+                   [--merit <file.mf>] [--format <list>|all]
 ```
 
-The default `MaxEflDeviation` is 3%. Configurations that deviate more from the target EFL receive progressively worse merit scores, with severe penalties as deviation approaches the maximum allowed
+Chooses the glasses for the two halves. Every ordered pair of candidate glasses - the element's own
+included - is first **screened**: given a small set of starting points, focal length exact, and
+scored by its best. The best `--refine` pairs are then split and optimised in full, and ranked by
+the merit function. Candidates are AberrationCalculator's **CoreSet28** working set unless `-g`
+names others: a search free to choose from every vendor's whole catalogue settles on glasses nobody
+stocks.
 
-### Element Selection
+Writes `<lens>_glass<N>.csv` (every pair, ranked), `<lens>_glass<N>.txt` (the ranking, and a full
+report for each written split), and the best `--top` splits as lenses.
 
-When no element is specified, LensSplitter analyzes all elements and recommends the best candidate for splitting. Elements are first filtered by eligibility, then ranked by a weighted aberration scoring that matches the optimization merit function.
-
-**Eligibility criteria (elements must have all of these):**
-- Positive power (splitting negative elements is typically not beneficial)
-- Not part of a cemented or air-spaced doublet/triplet
-- No aspheric (conic) surfaces
-
-**Scoring:** Eligible elements are ranked by their weighted contribution to system aberrations, computed from full Seidel ray-traced coefficients (S1, S2, S3) summed per element:
-
-```
-Score = W1·|S1_element| + W2·|S2_element| + W3·|S3_element|
-```
-
-This uses the same weights as the optimization merit function (W1=1.0, W2=1.0, W3=1.0), ensuring the element selected for splitting is the one whose splitting most improves overall system performance. Including coma (S2) in the scoring is particularly important for systems like Cooke triplets, where elements far from the stop contribute significant coma that S1-only scoring would miss. Buchdahl 5th-order aberrations are not used for element selection because they are system-level quantities that do not decompose cleanly into per-element contributions.
-
-## Glass Catalogs
-
-LensSplitter includes built-in glass catalogs:
-- Schott
-- Ohara
-- CDGM
-
-Additional AGF catalogs can be loaded via the `--catalog` option.
-
-### Default Glass List for Optimization
-
-The glass optimization command uses a default list of 28 glasses from the Schott S1_GLASS (preferred) catalog:
-
-| Category | Glasses |
-|----------|---------|
-| **Flint** (high dispersion) | F2, F5, SF1, SF2, SF4, SF5, LF5 |
-| **Crown** (low dispersion) | K7, N-BK7, N-K5, N-SK2, N-SK5, N-SK16, N-SSK5 |
-| **Barium** | N-BAF51, N-BAF52, N-BALF4, N-BASF2 |
-| **Lanthanum** (high index) | N-LAF2, LAFN7, LASF35, N-LAK9, N-LAK10 |
-| **Special** | N-FK58, N-PK51, N-PSK53A, N-KZFS4, N-SF57 |
-
-### Customizing the Glass List
-
-Use the `--glasses` or `-g` option to specify a custom list:
-
-```bash
-# Use specific glasses
-dotnet run --project src/LensSplitter.Cli -- glass -i input.zmx -o output/ --glasses "N-BK7,N-SK16,F2,SF2"
-
-# Use only crown glasses
-dotnet run --project src/LensSplitter.Cli -- glass -i input.zmx -o output/ -g "N-BK7,N-K5,N-SK2,N-SK5,N-SK16"
-
-# Use high-index glasses for compact designs
-dotnet run --project src/LensSplitter.Cli -- glass -i input.zmx -o output/ -g "N-LAK9,N-LAK10,LASF35,N-LAF2"
-```
-
-In interactive mode, press Enter at the glass prompt to use the default 28 glasses, or type a comma-separated list of glass names.
-
-## Project Structure
+### `merit`
 
 ```
-LensSplitter/
-├── src/
-│   ├── LensSplitter.Core/       # Core algorithms
-│   │   ├── Aberrations/         # Buchdahl 5th-order aberration calculator
-│   │   ├── Models/              # Optical system models
-│   │   ├── Paraxial/            # Ray tracing, Seidel calculations
-│   │   └── Splitting/           # Element splitting, optimization
-│   ├── LensSplitter.Parsing/    # File format support
-│   │   ├── Zmx/                 # ZEMAX parser
-│   │   ├── Optiland/            # JSON parser
-│   │   ├── Export/              # Exporters
-│   │   └── Glass/               # Glass catalog management
-│   ├── LensSplitter.Cli/        # Command-line interface
-│   └── LensSplitter.Visualization/  # SVG rendering
-└── tests/
-    ├── LensSplitter.Core.Tests/
-    ├── LensSplitter.Parsing.Tests/
-    └── LensSplitter.Integration.Tests/
+lenssplitter merit -i <lens> -o <file.mf>
 ```
+
+Writes the lens's default merit function to a file, to edit and pass back with `--merit`.
+
+## The merit function
+
+The merit function is AberrationCalculator's, in its own text format - one operand per line, which
+can be commented, diffed and kept beside a lens. The default is:
+
+```
+PRMSA, 1, TAR 0                 # the predicted RMS spot, every field and wavelength
+AXC,   w, TAR 0                 # real axial colour, for a lens with more than one wavelength
+LCF,   1, TAR 0, 1.0            # real lateral colour at the full field
+```
+
+The predicted spot measures each wavelength at its own focus, so it cannot see colour: axial colour
+is a focus that moves with wavelength, lateral colour an image that grows with it. So for a lens with
+more than one wavelength the default adds both. Axial colour is a length along the axis; it blurs
+the image by about that length times the image-space marginal ray angle u′, so its weight `w` is u′²,
+to count as a spot radius does.
+
+Anything AberrationCalculator's optimiser takes can be added - any of the 37 aberration coefficients
+by name (`B`, `F`, `C`, `Pi`, `E` at third order, `B5` to `E5` at fifth, `B7` and `Tau2` to `Tau20` at
+seventh), real distortion (`DISTF`), rays (`RX` ... `RN`), limits as well as targets:
+
+```
+B7,    1, TAR 0                 # seventh-order spherical
+DISTF, 1, MIN -1, MAX 1, 1.0    # distortion within one per cent at the full field
+```
+
+See AberrationCalculator's [docs/optimizer.md](https://github.com/jaruiz6363/AberrationCalculator/blob/main/docs/optimizer.md)
+for every operand. Whatever the file says, LensSplitter adds the focal length held, and edge
+thickness on the two halves and on the air around them.
+
+## How a split is made
+
+See [docs/how-it-works.md](docs/how-it-works.md). In short:
+
+1. **Starting points.** For each power ratio, bending of each half, gap, and length borrowed from the
+   air after the element, the four faces are built: the element's two outer faces keep their conic
+   and aspheric terms, the two new inner faces are spheres, and the two halves' power is scaled until
+   the lens's focal length is exactly the original's. Every later surface stays where it was.
+2. **Optimisation.** The best starting points - the best for each thickness, then the best of the
+   rest - are optimised: the four faces' curvatures free, the merit function, the focal length held,
+   edges kept.
+3. **Finishing.** The focal length is made exact, a polish follows with it held harder, and the image
+   plane moves with the paraxial focus, keeping whatever defocus the original lens had.
+
+## Glass catalogs
+
+The glass catalogs are AberrationCalculator's, in its `catalogs` folder: every major vendor's for
+reading lenses, and the CoreSet28 set the glass search chooses from. Add your own `.agf` files with
+`--catalogs <folder>`.
+
+For **Optiland**, each glass is written with its own dispersion data, into a `<lens>_glass` folder
+beside the `.json` and installed in `~/.optiland/catalogs`, and named strictly with its catalog - so
+Optiland uses exactly the glass the lens was designed with, and never substitutes a near name.
+
+## Limitations
+
+- The lens must be rotationally symmetric: no tilts, decentres or coordinate breaks.
+- An OSLO file keeps the full field but not the list of field points; read back, its predicted spot
+  is averaged over OSLO's own. At a finite object OSLO takes the field as an object height, on the
+  other side of the axis from a positive field angle, so coma and distortion change sign. The lens is
+  the same.
+- Optiland traces an r² aspheric term in real rays but leaves it out of its paraxial values, so its
+  focal length and pupils differ from the lens's. The written file is right; a real ray near the axis
+  gives the true focal length.
+- The predicted spot is a geometric one, and a truncated series: see AberrationCalculator's
+  documentation for where it holds.
 
 ## License
 
-MIT License - see [LICENSE](LICENSE) for details.
-
-## Acknowledgements
-
-- **[Optiland](https://github.com/HarrisonKramer/optiland)** - Open-source Python lens design and analysis tool by Harrison Kramer. LensSplitter supports Optiland's JSON file format for interoperability.
-
-## References
-
-- Smith, W. J. "Modern Optical Engineering" - Seidel aberration theory
-- Buchdahl, H. A. "Optical Aberration Coefficients" - 5th-order aberration theory
-- Kingslake, R. "Lens Design Fundamentals" - Lens splitting techniques
-- ZEMAX OpticStudio User Manual - File format specification
-- Kramer, H. "Optiland" - https://github.com/HarrisonKramer/optiland
+MIT - see [LICENSE](LICENSE).

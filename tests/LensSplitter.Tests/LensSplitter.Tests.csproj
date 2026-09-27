@@ -1,0 +1,30 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>LensSplitter.Tests</RootNamespace>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.8.0" />
+    <PackageReference Include="xunit" Version="2.6.2" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="2.5.4">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\LensSplitter.Core\LensSplitter.Core.csproj" />
+    <ProjectReference Include="..\..\src\LensSplitter.Cli\LensSplitter.Cli.csproj" />
+  </ItemGroup>
+
+  <!-- Test lenses: LensSplitter's own, and AberrationCalculator's fixtures, which include figured
+       designs, finite conjugates and model glasses. -->
+  <ItemGroup>
+    <None Include="..\TestData\**\*" CopyToOutputDirectory="PreserveNewest" LinkBase="TestData" />
+    <None Include="..\..\external\AberrationCalculator\tests\fixtures\lenses\**\*" CopyToOutputDirectory="PreserveNewest" LinkBase="lenses" />
+    <None Include="..\..\external\AberrationCalculator\tests\fixtures\coefficient-reference\*.zmx" CopyToOutputDirectory="PreserveNewest" LinkBase="reference" />
+    <None Include="..\..\external\AberrationCalculator\catalogs\**\*" CopyToOutputDirectory="PreserveNewest" LinkBase="catalogs" />
+  </ItemGroup>
+</Project>

@@ -3,4 +3,14 @@
     <RootNamespace>LensSplitter.Core</RootNamespace>
     <AssemblyName>LensSplitter.Core</AssemblyName>
   </PropertyGroup>
+
+  <!-- The optics - lens model, readers and writers for every format, glass, Seidel, Buchdahl
+       through seventh order, Robb's predicted spot and the optimiser - are AberrationCalculator's,
+       from the submodule. LensSplitter adds only what is its own: choosing an element and
+       splitting it. -->
+  <ItemGroup>
+    <ProjectReference Include="..\..\external\AberrationCalculator\src\AberrationCalculator.Core\AberrationCalculator.Core.csproj" />
+    <ProjectReference Include="..\..\external\AberrationCalculator\src\AberrationCalculator.IO\AberrationCalculator.IO.csproj" />
+    <ProjectReference Include="..\..\external\AberrationCalculator\src\AberrationCalculator.Optimize\AberrationCalculator.Optimize.csproj" />
+  </ItemGroup>
 </Project>
