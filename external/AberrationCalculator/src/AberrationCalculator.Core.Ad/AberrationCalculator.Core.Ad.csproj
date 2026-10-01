@@ -1,0 +1,81 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    The aberration chain, differentiated.
+
+    Every <Compile Include> below is a LINK to the file of the same name in
+    AberrationCalculator.Core - the same source, compiled a second time with `Scalar` aliased
+    to a dual number instead of to `double` (see AdAlias.cs). Nothing is copied, so the two
+    arithmetics cannot drift apart: a correction to Buchdahl's scheme lands in the derivative
+    the moment it lands in the value.
+
+    This project deliberately does NOT reference AberrationCalculator.Core. It compiles its own
+    Surface, OpticalSystem and Enums, so the types here are a separate universe from Core's and
+    a double cannot be handed to the differentiating chain by accident. Consumers reference it
+    through an extern alias; see AberrationCalculator.Optimize.
+  -->
+
+  <PropertyGroup>
+    <TargetFrameworks>net8.0;netstandard2.0</TargetFrameworks>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <RootNamespace>AberrationCalculator.Core.Ad</RootNamespace>
+    <AssemblyName>AberrationCalculator.Core.Ad</AssemblyName>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <CoreSource Include="../AberrationCalculator.Core/Compatibility.cs" />
+    <CoreSource Include="../AberrationCalculator.Core/Enums/Enums.cs" />
+    <CoreSource Include="../AberrationCalculator.Core/Models/Surface.cs" />
+    <CoreSource Include="../AberrationCalculator.Core/Models/OpticalSystem.cs" />
+    <CoreSource Include="../AberrationCalculator.Core/RayTrace/ParaxialTrace.cs" />
+    <CoreSource Include="../AberrationCalculator.Core/RayTrace/RealRayTrace.cs" />
+    <CoreSource Include="../AberrationCalculator.Core/RayTrace/LocalFrame.cs" />
+    <CoreSource Include="../AberrationCalculator.Core/Aberrations/BuchdahlCoefficients.cs" />
+    <CoreSource Include="../AberrationCalculator.Core/Aberrations/BuchdahlScheme.cs" />
+    <CoreSource Include="../AberrationCalculator.Core/Aberrations/BuchdahlTableI.cs" />
+    <CoreSource Include="../AberrationCalculator.Core/Aberrations/BuchdahlIdentities.cs" />
+    <CoreSource Include="../AberrationCalculator.Core/Aberrations/BuchdahlSecondaryQ.cs" />
+    <CoreSource Include="../AberrationCalculator.Core/Aberrations/BuchdahlTertiaryIdentities.cs" />
+    <CoreSource Include="../AberrationCalculator.Core/Aberrations/TertiaryCoefficients.cs" />
+    <!-- The aspheric tertiary routine TertiaryCoefficients.Attach sends a figured system to. -->
+    <CoreSource Include="../AberrationCalculator.Core/Aberrations/BuchdahlAsphericScheme.cs" />
+    <CoreSource Include="../AberrationCalculator.Core/Aberrations/TertiaryCubics.cs" />
+    <CoreSource Include="../AberrationCalculator.Core/Aberrations/TertiaryScriptT.cs" />
+    <CoreSource Include="../AberrationCalculator.Core/Aberrations/AsphericSchemeIncrements.cs" />
+    <CoreSource Include="../AberrationCalculator.Core/Aberrations/Prms.cs" />
+
+    <!--
+      Nodal aberration theory's tolerance sensitivity. Algebraic in the paraxial rays and the
+      curvatures, so the optimiser gets the derivative of as-built performance for the same
+      price as its value. It deliberately does NOT go through SeidelCoefficients, which is
+      still plain double: the quantity it needs is the Seidel kernel with both incidences
+      divided out, and recovering that from S1, S2 or S3 would reintroduce a division by an
+      incidence that vanishes at normal incidence. See the note in the file.
+    -->
+    <CoreSource Include="../AberrationCalculator.Core/Nat/Sensitivity.cs" />
+
+    <!--
+      Forbes' series trace is NOT differentiated, because the optimiser never reaches it: it
+      handles spherical surfaces only, and a design carrying a conic or an even asphere is
+      refused before a single evaluation runs. See Optimize/Evaluation/SphericalOnly.cs.
+    -->
+
+    <Compile Include="@(CoreSource)" Link="linked/%(Filename)%(Extension)" />
+  </ItemGroup>
+
+
+  <ItemGroup>
+    <!--
+      The series arithmetic, differentiated: Scalar = DualSeries. It is what makes a figured flat
+      facing collimated light reachable HERE and not only in the plain-double build - see
+      TertiaryCoefficients.FlatCollimated.Ad.cs. Aliased for the same reason Core.Optimize aliases
+      this assembly: every name the two share would otherwise be ambiguous.
+    -->
+    <ProjectReference Include="../AberrationCalculator.Core.Series.Ad/AberrationCalculator.Core.Series.Ad.csproj">
+      <Aliases>SeriesAd</Aliases>
+      <PrivateAssets>all</PrivateAssets>
+    </ProjectReference>
+  </ItemGroup>
+</Project>

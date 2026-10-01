@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFrameworks>net8.0;netstandard2.0</TargetFrameworks>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <RootNamespace>AberrationCalculator.Core</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!--
+      The Laurent-series build of this same aberration chain, compiled from these very source
+      files (see its project file). It carries the same namespaces, so it is reached only under
+      `Series::`, and only from Aberrations/TertiaryCoefficients.FlatCollimated.cs - which is not
+      linked into either of the other arithmetics. PrivateAssets keeps it from arriving un-aliased
+      in anything that references Core.
+    -->
+    <ProjectReference Include="..\AberrationCalculator.Core.Series\AberrationCalculator.Core.Series.csproj">
+      <Aliases>Series</Aliases>
+      <PrivateAssets>all</PrivateAssets>
+    </ProjectReference>
+  </ItemGroup>
+</Project>

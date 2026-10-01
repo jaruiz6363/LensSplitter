@@ -1,0 +1,28 @@
+{
+  "aperture": { "type": "EPD", "value": 10.0 },
+  "fields": {
+    "field_type": "angle",
+    "fields": [ { "y": 0.0 }, { "y": 20.0 } ]
+  },
+  "wavelengths": {
+    "wavelengths": [ { "value": 0.55, "is_primary": true, "weight": 1.0, "unit": "um" } ]
+  },
+  "surface_group": {
+    "surfaces": [
+      { "geometry": { "type": "Plane", "cs": { "z": 0.0 } }, "thickness": 1e308 },
+      { "geometry": { "type": "StandardGeometry", "radius": 22.013590, "conic": 0.0, "cs": { "z": 0.0 } },
+        "thickness": 3.258960, "material_post": { "type": "Material", "name": "SK16" } },
+      { "geometry": { "type": "StandardGeometry", "radius": -435.760440, "conic": 0.0, "cs": { "z": 3.258960 } },
+        "thickness": 6.007550 },
+      { "geometry": { "type": "StandardGeometry", "radius": -22.213280, "conic": 0.0, "cs": { "z": 9.266510 } },
+        "thickness": 0.999970, "material_post": { "type": "Material", "name": "F2" } },
+      { "geometry": { "type": "StandardGeometry", "radius": 20.291920, "conic": 0.0, "cs": { "z": 10.266480 } },
+        "thickness": 4.750410, "is_stop": true },
+      { "geometry": { "type": "StandardGeometry", "radius": 79.683600, "conic": 0.0, "cs": { "z": 15.016890 } },
+        "thickness": 2.952080, "material_post": { "type": "Material", "name": "SK16" } },
+      { "geometry": { "type": "StandardGeometry", "radius": -18.395330, "conic": 0.0, "cs": { "z": 17.968970 } },
+        "thickness": 42.4150633 },
+      { "geometry": { "type": "Plane", "cs": { "z": 60.384033 } }, "thickness": 0.0 }
+    ]
+  }
+}

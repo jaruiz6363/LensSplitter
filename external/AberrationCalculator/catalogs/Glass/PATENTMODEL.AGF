@@ -1,0 +1,42 @@
+NM NIK_184042_4330 2 0 1.84042 43.30 0 0 1
+GC Model glass (1-term Sellmeier) fit to nd=1.84042 Vd=43.30; patent substitute (discontinued Nikon high-index)
+ED 0.0 0.0 0.0 0.0 0 0
+CD 2.28451767E+00 1.48440000E-02 0.0 0.0 0.0 0.0
+TD 0.0 0.0 0.0 0.0 0.0 0.0 2.0E1
+LD 3.0E-1 1.0E0
+CC
+NM NIK_174810_5228 2 0 1.74810 52.28 0 0 1
+GC Model glass (1-term Sellmeier) fit to nd=1.74810 Vd=52.28; patent substitute (discontinued Nikon)
+ED 0.0 0.0 0.0 0.0 0 0
+CD 1.98327104E+00 1.21900000E-02 0.0 0.0 0.0 0.0
+TD 0.0 0.0 0.0 0.0 0.0 0.0 2.0E1
+LD 3.0E-1 1.0E0
+CC
+NM NIK_179668_4542 2 0 1.79668 45.42 0 0 1
+GC Model glass (1-term Sellmeier) fit to nd=1.79668 Vd=45.42; patent substitute
+ED 0.0 0.0 0.0 0.0 0 0
+CD 2.13725210E+00 1.40720000E-02 0.0 0.0 0.0 0.0
+TD 0.0 0.0 0.0 0.0 0.0 0.0 2.0E1
+LD 3.0E-1 1.0E0
+CC
+NM NIK_159507_3551 2 0 1.59507 35.51 0 0 1
+GC Model glass (1-term Sellmeier) fit to nd=1.59507 Vd=35.51; patent substitute
+ED 0.0 0.0 0.0 0.0 0 0
+CD 1.46809896E+00 1.70260000E-02 0.0 0.0 0.0 0.0
+TD 0.0 0.0 0.0 0.0 0.0 0.0 2.0E1
+LD 3.0E-1 1.0E0
+CC
+NM MDL_149100_8154 2 0 1.49100 81.54 0 0 1
+GC Model glass (1-term Sellmeier) fit to nd=1.49100 Vd=81.54; patent substitute (fluorite-like)
+ED 0.0 0.0 0.0 0.0 0 0
+CD 1.19658421E+00 7.48000000E-03 0.0 0.0 0.0 0.0
+TD 0.0 0.0 0.0 0.0 0.0 0.0 2.0E1
+LD 3.0E-1 1.0E0
+CC
+NM MDL_188300_3922 2 0 1.88300 39.22 0 0 1
+GC Model glass (1-term Sellmeier) fit to nd=1.88300 Vd=39.22; patent substitute
+ED 0.0 0.0 0.0 0.0 0 0
+CD 2.42459553E+00 1.64240000E-02 0.0 0.0 0.0 0.0
+TD 0.0 0.0 0.0 0.0 0.0 0.0 2.0E1
+LD 3.0E-1 1.0E0
+CC

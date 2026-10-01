@@ -1,0 +1,35 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <RootNamespace>AberrationCalculator.Optimize</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\AberrationCalculator.Core\AberrationCalculator.Core.csproj" />
+    <ProjectReference Include="..\AberrationCalculator.IO\AberrationCalculator.IO.csproj" />
+
+    <!--
+      The differentiating build of the same aberration chain. It carries the SAME namespaces as
+      Core - AberrationCalculator.Core.Models, .Aberrations and so on - because it is the same
+      source. The alias puts all of it under `Ad::` so those names never merge with Core's:
+      `OpticalSystem` in this project means Core's, unambiguously, and the dual-number one has
+      to be asked for by `Ad::`. Only Evaluation/AdBridge.cs and its neighbours do that.
+    -->
+    <ProjectReference Include="..\AberrationCalculator.Core.Ad\AberrationCalculator.Core.Ad.csproj">
+      <Aliases>Ad</Aliases>
+      <!--
+        And it stops here. An alias is not inherited by a project that references THIS one, so
+        without PrivateAssets a consumer would pick Core.Ad up transitively, un-aliased, and
+        every name the two assemblies share - OpticalSystem, BuchdahlTerms, ParaxialResult -
+        would become ambiguous in code that never asked for the differentiating build at all.
+        The assembly is still copied to the output, so it is there to run against.
+      -->
+      <PrivateAssets>all</PrivateAssets>
+    </ProjectReference>
+  </ItemGroup>
+
+</Project>

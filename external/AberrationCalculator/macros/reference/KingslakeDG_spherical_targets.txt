@@ -1,0 +1,60 @@
+BUCH7 on tests/fixtures/lenses/KingslakeDG.zmx, wavelength 2, object at infinity.
+
+Nine spherical surfaces.  EFL 100.003939,  F/8.000315,  Lagrange 1.558300,
+Buchdahl p 0.113648.
+
+WHY THIS FILE EXISTS.  BUCH7_ASPH must reproduce BUCH7 exactly on a system of
+spheres - none of its aspheric machinery is reached there, so any difference is a
+fault in the transcription and not in the Sec. 85 arrangement.  Stage A and B were
+checked against this on 2026-09-15 and agreed at every printed digit: 45 per-surface
+third-order values, the five column sums, and all eighteen transverse totals.
+
+Stage D has not been written yet.  When it is, the twenty tau below are what it must
+reproduce on this file, and they are recorded here so that the check costs no further
+run of OpticStudio.
+
+THE EIGHTEEN, transverse measure - what FIFTHORD prints, and what stage B produced.
+
+    B     9.364706E-03    F    -8.375668E-03    C     1.948688E-02
+    Pi   -5.373008E-02    E     1.434128E-02
+    B5   -3.326184E-03    F1   -2.073867E-02    F2   -1.383551E-02
+    M1    6.155982E-02    M2    3.275476E-02    M3    6.102600E-02
+    N1   -1.457458E-03    N2   -6.529533E-04    N3   -9.068889E-04
+    C5   -7.338967E-04    Pi5   8.286438E-03    E5    1.906721E-03
+    B7   -6.391383E-04
+
+THE TWENTY TAU, transverse measure, system totals.  tau1 must equal B7 above; the
+two reach it by different routes and agree exactly on a system of spheres.
+
+    tau1  -6.391383E-04    tau2  -1.980083E-03    tau3  -1.481625E-03
+    tau4   8.516159E-03    tau5   2.273704E-03    tau6   1.294019E-02
+    tau7  -3.527258E-03    tau8  -2.634353E-03    tau9  -1.342359E-03
+    tau10 -7.046627E-05    tau11  5.336894E-03    tau12 -3.610726E-03
+    tau13  1.683778E-03    tau14 -2.301909E-03    tau15  2.018563E-03
+    tau16  1.460431E-03    tau17  6.068988E-04    tau18 -1.328261E-03
+    tau19 -2.725441E-04    tau20  6.767108E-05
+
+The same totals split into the part each surface generates on its own and the part it
+generates by acting on what reached it:
+
+              intrinsic        induced
+    tau1     6.519279E-04   -1.291066E-03
+    tau2    -1.516356E-03   -4.637266E-04
+    tau3    -6.058612E-04   -8.757640E-04
+    tau4     5.556160E-03    2.959998E-03
+    tau5     2.018642E-03    2.550622E-04
+    tau6     4.200651E-03    8.739537E-03
+    tau7     9.689931E-03   -1.321719E-02
+    tau8     1.024648E-02   -1.288083E-02
+    tau9     6.928492E-03   -8.270852E-03
+    tau10    6.408009E-04   -7.112672E-04
+    tau11    9.527646E-03   -4.190752E-03
+    tau12    6.684136E-03   -1.029486E-02
+    tau13    1.618311E-03    6.546702E-05
+    tau14    4.393215E-03   -6.695124E-03
+    tau15    8.972813E-03   -6.954250E-03
+    tau16    5.204976E-03   -3.744545E-03
+    tau17    1.719173E-03   -1.112275E-03
+    tau18    2.708080E-03   -4.036341E-03
+    tau19    6.300976E-04   -9.026417E-04
+    tau20   -2.310346E-03    2.378017E-03

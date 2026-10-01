@@ -1,0 +1,94 @@
+<Window x:Class="AberrationCalculator.McpSetup.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Register abcalc with Claude"
+        Height="640" Width="820" WindowStartupLocation="CenterScreen">
+    <Grid Margin="16">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <TextBlock Grid.Row="0" TextWrapping="Wrap" Margin="0,0,0,14">
+            This points Claude at the abcalc MCP server, so an assistant can read a lens file
+            and ask for its prescription, its first-order layout and its aberration
+            coefficients directly. It edits your Claude configuration, so it takes a backup
+            first and merges rather than replaces — anything already registered stays.
+        </TextBlock>
+
+        <GroupBox Grid.Row="1" Header="1. The server" Padding="10" Margin="0,0,0,10">
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <TextBox Grid.Row="0" Grid.Column="0" x:Name="txtServer" Padding="4"
+                         VerticalContentAlignment="Center" TextChanged="Server_Changed" />
+                <Button Grid.Row="0" Grid.Column="1" Content="Browse..." Margin="8,0,0,0"
+                        Padding="12,4" Click="Browse_Click" />
+                <Button Grid.Row="0" Grid.Column="2" Content="Build it" Margin="6,0,0,0"
+                        Padding="12,4" Click="Build_Click" x:Name="btnBuild" />
+                <TextBlock Grid.Row="1" Grid.ColumnSpan="3" x:Name="txtServerState"
+                           Margin="0,6,0,0" FontFamily="Consolas" />
+            </Grid>
+        </GroupBox>
+
+        <GroupBox Grid.Row="2" Header="2. Where to register it" Padding="10" Margin="0,0,0,10">
+            <StackPanel>
+                <CheckBox x:Name="chkDesktop" Margin="0,2">
+                    <TextBlock x:Name="txtDesktop" TextWrapping="Wrap" />
+                </CheckBox>
+                <CheckBox x:Name="chkCode" Margin="0,6,0,2">
+                    <TextBlock x:Name="txtCode" TextWrapping="Wrap" />
+                </CheckBox>
+                <StackPanel Orientation="Horizontal" Margin="24,4,0,0">
+                    <TextBlock Text="Scope:" VerticalAlignment="Center" Margin="0,0,8,0" />
+                    <ComboBox x:Name="cboScope" Width="110" SelectedIndex="0"
+                              SelectionChanged="Scope_Changed">
+                        <ComboBoxItem Content="user" />
+                        <ComboBoxItem Content="local" />
+                        <ComboBoxItem Content="project" />
+                    </ComboBox>
+                    <TextBlock x:Name="txtScope" VerticalAlignment="Center" Margin="10,0,0,0"
+                               Foreground="#555" TextWrapping="Wrap" />
+                </StackPanel>
+            </StackPanel>
+        </GroupBox>
+
+        <GroupBox Grid.Row="3" Header="3. What it will be called" Padding="10" Margin="0,0,0,10">
+            <StackPanel Orientation="Horizontal">
+                <TextBox x:Name="txtName" Text="abcalc" Width="180" Padding="4"
+                         VerticalContentAlignment="Center" />
+                <TextBlock Margin="10,0,0,0" VerticalAlignment="Center" Foreground="#555"
+                           Text="An existing server of this name will be replaced. Others are untouched." />
+            </StackPanel>
+        </GroupBox>
+
+        <StackPanel Grid.Row="4" Orientation="Horizontal" Margin="0,0,0,10">
+            <Button x:Name="btnRegister" Content="Register" Padding="20,6" Click="Register_Click" />
+            <Button x:Name="btnRemove" Content="Remove" Padding="20,6" Margin="10,0,0,0"
+                    Click="Remove_Click" />
+            <Button Content="Re-scan" Padding="20,6" Margin="10,0,0,0" Click="Rescan_Click" />
+        </StackPanel>
+
+        <TextBox Grid.Row="5" x:Name="txtLog" IsReadOnly="True" FontFamily="Consolas"
+                 FontSize="12" VerticalScrollBarVisibility="Auto" TextWrapping="NoWrap"
+                 HorizontalScrollBarVisibility="Auto" Background="#F7F7F7" Padding="8" />
+
+        <Border Grid.Row="6" x:Name="pnlRestart" Margin="0,10,0,0" Padding="10"
+                Background="#FFF4CE" BorderBrush="#E0C060" BorderThickness="1"
+                Visibility="Collapsed">
+            <TextBlock x:Name="txtRestart" TextWrapping="Wrap" FontWeight="SemiBold" />
+        </Border>
+    </Grid>
+</Window>

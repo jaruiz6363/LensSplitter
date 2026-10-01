@@ -1,0 +1,55 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    The aberration chain again, in LAURENT SERIES arithmetic.
+
+    Every <Compile Include> below is a LINK to the file of the same name in
+    AberrationCalculator.Core, exactly as AberrationCalculator.Core.Ad does it, compiled with
+    `Scalar` aliased to a truncated Laurent series in one small parameter instead of to
+    `double` (see SeriesAlias.cs). Nothing is copied.
+
+    What it is for: a surface whose incidence vanishes identically - a figured flat facing
+    collimated light - where the ordinary formulas divide by that incidence. Seeding the
+    surface's curvature as the series variable makes every power of 1/i_p an explicit term, the
+    general formulas run unchanged, and the finite answer is the zeroth-order coefficient. No
+    limit is taken numerically and nothing is re-derived by hand.
+
+    Like Core.Ad it deliberately does NOT reference AberrationCalculator.Core, so its types are a
+    separate universe and are reached only through an extern alias.
+  -->
+
+  <PropertyGroup>
+    <TargetFrameworks>net8.0;netstandard2.0</TargetFrameworks>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <RootNamespace>AberrationCalculator.Core.SeriesArithmetic</RootNamespace>
+    <AssemblyName>AberrationCalculator.Core.Series</AssemblyName>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <CoreSource Include="../AberrationCalculator.Core/Compatibility.cs" />
+    <CoreSource Include="../AberrationCalculator.Core/Enums/Enums.cs" />
+    <CoreSource Include="../AberrationCalculator.Core/Models/Surface.cs" />
+    <CoreSource Include="../AberrationCalculator.Core/Models/OpticalSystem.cs" />
+    <CoreSource Include="../AberrationCalculator.Core/RayTrace/ParaxialTrace.cs" />
+    <CoreSource Include="../AberrationCalculator.Core/RayTrace/RealRayTrace.cs" />
+    <CoreSource Include="../AberrationCalculator.Core/RayTrace/LocalFrame.cs" />
+    <CoreSource Include="../AberrationCalculator.Core/Aberrations/BuchdahlCoefficients.cs" />
+    <CoreSource Include="../AberrationCalculator.Core/Aberrations/BuchdahlScheme.cs" />
+    <CoreSource Include="../AberrationCalculator.Core/Aberrations/BuchdahlTableI.cs" />
+    <CoreSource Include="../AberrationCalculator.Core/Aberrations/BuchdahlIdentities.cs" />
+    <CoreSource Include="../AberrationCalculator.Core/Aberrations/BuchdahlSecondaryQ.cs" />
+    <CoreSource Include="../AberrationCalculator.Core/Aberrations/BuchdahlTertiaryIdentities.cs" />
+    <CoreSource Include="../AberrationCalculator.Core/Aberrations/TertiaryCoefficients.cs" />
+    <CoreSource Include="../AberrationCalculator.Core/Aberrations/BuchdahlAsphericScheme.cs" />
+    <CoreSource Include="../AberrationCalculator.Core/Aberrations/TertiaryCubics.cs" />
+    <CoreSource Include="../AberrationCalculator.Core/Aberrations/TertiaryScriptT.cs" />
+    <CoreSource Include="../AberrationCalculator.Core/Aberrations/AsphericSchemeIncrements.cs" />
+    <CoreSource Include="../AberrationCalculator.Core/Aberrations/Prms.cs" />
+    <CoreSource Include="../AberrationCalculator.Core/Nat/Sensitivity.cs" />
+
+    <Compile Include="@(CoreSource)" Link="linked/%(Filename)%(Extension)" />
+  </ItemGroup>
+
+</Project>

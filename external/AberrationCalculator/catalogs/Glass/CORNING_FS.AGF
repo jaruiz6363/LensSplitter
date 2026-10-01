@@ -1,0 +1,280 @@
+CC ============================================================================
+CC Corning HPFS Fused Silica catalog
+CC ============================================================================
+CC Built from Corning Specialty Materials Product Information Sheet
+CC "HPFS 7979, 7980, 8655 Fused Silica", July 2015
+CC Source: https://www.corning.com (Corning Advanced Optics)
+CC
+CC Catalog version: 1.1   (2026-05-16)
+CC Compiled by Synapse Optics for use with optical design software
+CC supporting the Zemax AGF (Ascii Glass File) format.
+CC
+CC Sellmeier formula (Zemax/OpticStudio FormulaType 2):
+CC     n^2 - 1 = K1 L^2/(L^2 - L1) + K2 L^2/(L^2 - L2) + K3 L^2/(L^2 - L3)
+CC where L is wavelength in micrometers and L1, L2, L3 are the
+CC wavelength-squared resonance terms (units of um^2).
+CC
+CC HPFS 7980 (22 C): coefficients are taken DIRECTLY from the Corning
+CC brochure (3-term Sellmeier fit). Validation against the 20 tabulated
+CC index values in the brochure yields a max error of 2.4e-06 over the
+CC range 185 nm to 1129 nm.
+CC
+CC HPFS 7979 (22 C): the brochure provides a 4-term Sellmeier; the Zemax
+CC AGF format only supports a 3-term Sellmeier (formula 2). The 3-term
+CC coefficients below are a re-fit to the 35 tabulated indices in the
+CC brochure (185 nm to 2326 nm). Max error 3.8e-06.
+CC
+CC HPFS 8655 (22 C): same situation as 7979. Coefficients are a 3-term
+CC re-fit to indices generated from the brochure's 4-term 22 C Sellmeier
+CC over 185 nm to 2326 nm. Max error 2.9e-06.
+CC
+CC All three glasses have:
+CC   n_d (587.725 nm) = 1.458461 (7980), 1.458522 (7979, 8655)
+CC   V_d              = 67.8
+CC   density          = 2.20 g/cm^3
+CC   thermal expansion alpha (-30 to +70 C) = 0.52 ppm/C
+CC
+CC Disclaimer: This catalog is provided as a convenience for optical
+CC design and modeling. Always verify against the latest Corning
+CC datasheet for production designs. No warranty is expressed or implied.
+CC
+CC ============================================================================
+CC
+CC NM  <name> <formula> <MIL> <Nd> <Vd> <ExcludeSubs> <Status> <MeltFreq>
+CC ED  <TCE-30/70> <TCE+20/300> <density> <dPgF> <ignore_thermal_exp> <Status>
+CC CD  <K1> <L1> <K2> <L2> <K3> <L3> 0 0 0 0
+CC TD  six dn/dT coefficients + reference temperature
+CC OD  six environmental data
+CC LD  <lambda_min> <lambda_max>     in micrometers
+CC IT  <wavelength_um> <int_trans> <thickness_mm>
+CC
+CC NM-line slot meaning (per OpticStudio "Glass Catalog Format"):
+CC   MIL          = MIL-spec catalog number; use 0 if not applicable.
+CC   Nd           = refractive index at d-line (587.56 nm), 1.0-2.0 typical.
+CC   Vd           = Abbe number at d-line, > 0.
+CC   ExcludeSubs  = 1 to exclude from glass substitution, else 0.
+CC   Status       = 0 standard, 1 preferred, 2 obsolete, 3 special, 4 melt,
+CC                  5 inquire, 6 experimental.
+CC   MeltFreq     = melt frequency, 0..n (informational).
+CC
+CC IMPORTANT -- the ED-line last field MUST be 0, not 1.
+CC Setting it to 1 ("Preferred") on a Sellmeier or Conrady glass is
+CC mishandled by some readers: the
+CC prescription report shows the correct |n| but cardinal-point /
+CC ray-trace evaluation uses a model-glass approximation that gives a
+CC very different index and wrong EFL. Empirically verified 2026-05-14.
+CC
+CC ============================================================================
+NM HPFS_7980 2 0 1.458461 67.80 0 0 1
+ED 0.520000 0.570000 2.200000 0.000000 0 0
+CD 0.683740494 0.004603528 0.420323613 0.013396886 0.585027480 64.493273200 0 0 0 0
+TD 0.000000 0.000000 0.000000 0.000000 0.000000 0.000000 22.000000
+OD -1.000000 -1.000000 -1.000000 -1.000000 -1.000000 -1.000000
+LD 0.184950 1.128950
+IT 0.184950 0.5000 25.000000
+IT 0.193000 0.7000 10.000000
+IT 0.214506 0.8500 10.000000
+IT 0.248000 0.9990 10.000000
+IT 0.365119 0.9999 10.000000
+IT 0.587725 0.9999 10.000000
+IT 1.014260 0.9999 10.000000
+IT 1.128950 0.9990 10.000000
+CC
+CC ----------------------------------------------------------------------------
+CC HPFS_7980 vendor-name aliases for vendor .zmx file compatibility
+CC ----------------------------------------------------------------------------
+CC The Edmund Optics vendor .zmx files use legacy/colloquial Corning HPFS
+CC names in their GLAS field. Each alias below duplicates the HPFS_7980
+CC Sellmeier coefficients verbatim under a different NM name, so the
+CC glass resolver returns the canonical HPFS_7980 index data when a
+CC vendor file references one of these aliases.
+CC
+CC Aliases added 2026-05-16:
+CC   C79-80    -- legacy Corning product designation for HPFS 7980 used
+CC                in Edmund's vendor .zmx (e.g. catalogs/Lenses/EdmundOptics
+CC                /UVFSPlanoConvex/*.zmx). 493 surface uses in the
+CC                May-2026 Edmund scrape (per glass-coverage-survey.json).
+CC   F_SILICA  -- generic "fused silica" placeholder used by some Edmund
+CC                .zmx files. 10 surface uses.
+CC   FUSED     -- another generic "fused silica" placeholder. 1 surface use.
+CC   SILICA    -- generic "silica" placeholder. 8 surface uses. Added 2026-05-17.
+CC
+CC If your vendor file actually references HPFS 7979 (which has slightly
+CC different OH-content and a 4-term Sellmeier) or HPFS 8655 (low-OH grade),
+CC use those entries directly instead of these aliases.
+CC ----------------------------------------------------------------------------
+NM C79-80 2 0 1.458461 67.80 0 0 1
+GC Alias for HPFS_7980 (Corning legacy product code "Code 7980")
+ED 0.520000 0.570000 2.200000 0.000000 0 0
+CD 0.683740494 0.004603528 0.420323613 0.013396886 0.585027480 64.493273200 0 0 0 0
+TD 0.000000 0.000000 0.000000 0.000000 0.000000 0.000000 22.000000
+OD -1.000000 -1.000000 -1.000000 -1.000000 -1.000000 -1.000000
+LD 0.184950 1.128950
+CC
+NM F_SILICA 2 0 1.458461 67.80 0 0 1
+GC Alias for HPFS_7980 (generic "fused silica" vendor placeholder)
+ED 0.520000 0.570000 2.200000 0.000000 0 0
+CD 0.683740494 0.004603528 0.420323613 0.013396886 0.585027480 64.493273200 0 0 0 0
+TD 0.000000 0.000000 0.000000 0.000000 0.000000 0.000000 22.000000
+OD -1.000000 -1.000000 -1.000000 -1.000000 -1.000000 -1.000000
+LD 0.184950 1.128950
+CC
+NM FUSED 2 0 1.458461 67.80 0 0 1
+GC Alias for HPFS_7980 (generic "fused" vendor placeholder)
+ED 0.520000 0.570000 2.200000 0.000000 0 0
+CD 0.683740494 0.004603528 0.420323613 0.013396886 0.585027480 64.493273200 0 0 0 0
+TD 0.000000 0.000000 0.000000 0.000000 0.000000 0.000000 22.000000
+OD -1.000000 -1.000000 -1.000000 -1.000000 -1.000000 -1.000000
+LD 0.184950 1.128950
+CC
+NM SILICA 2 0 1.458461 67.80 0 0 1
+GC Alias for HPFS_7980 (generic "silica" vendor placeholder)
+ED 0.520000 0.570000 2.200000 0.000000 0 0
+CD 0.683740494 0.004603528 0.420323613 0.013396886 0.585027480 64.493273200 0 0 0 0
+TD 0.000000 0.000000 0.000000 0.000000 0.000000 0.000000 22.000000
+OD -1.000000 -1.000000 -1.000000 -1.000000 -1.000000 -1.000000
+LD 0.184950 1.128950
+CC
+CC ----------------------------------------------------------------------------
+CC
+NM HPFS_7979 2 0 1.458522 67.80 0 0 1
+ED 0.520000 0.570000 2.200000 0.000000 0 0
+CD 0.679531453 0.004559592 0.424735954 0.013367126 0.908891753 99.382440947 0 0 0 0
+TD 0.000000 0.000000 0.000000 0.000000 0.000000 0.000000 22.000000
+OD -1.000000 -1.000000 -1.000000 -1.000000 -1.000000 -1.000000
+LD 0.184950 2.326050
+IT 0.184950 0.5000 25.000000
+IT 0.214506 0.9000 10.000000
+IT 0.248000 0.9990 10.000000
+IT 0.365119 0.9999 10.000000
+IT 0.587725 0.9999 10.000000
+IT 1.014260 0.9999 10.000000
+IT 1.530000 0.9990 10.000000
+IT 2.326050 0.9900 10.000000
+CC
+CC ----------------------------------------------------------------------------
+CC
+NM HPFS_8655 2 0 1.458522 67.80 0 0 1
+ED 0.520000 0.570000 2.200000 0.000000 0 0
+CD 0.679652069 0.004560681 0.424615254 0.013368000 0.909859193 99.484093156 0 0 0 0
+TD 0.000000 0.000000 0.000000 0.000000 0.000000 0.000000 22.000000
+OD -1.000000 -1.000000 -1.000000 -1.000000 -1.000000 -1.000000
+LD 0.184950 2.326050
+IT 0.184950 0.5000 1.000000
+IT 0.193000 0.99975 1.000000
+IT 0.214506 0.9500 10.000000
+IT 0.248000 0.9990 10.000000
+IT 0.365119 0.9999 10.000000
+IT 0.587725 0.9999 10.000000
+IT 1.014260 0.9999 10.000000
+IT 1.530000 0.9990 10.000000
+IT 2.326050 0.9900 10.000000
+CC
+CC ----------------------------------------------------------------------------
+CC
+CC ============================================================================
+CC ArF / 193 nm narrowband prescription glasses
+CC ============================================================================
+CC FS_P and CAF2_P are narrowband prescription materials defined exactly at
+CC three wavelengths in the ArF excimer band:
+CC     WV1 = 0.193396 um
+CC     WV2 = 0.193400 um
+CC     WV3 = 0.193404 um
+CC
+CC Dispersion is fit using the Conrady formula (Zemax FormulaType 5):
+CC     n(L) = n0 + A/L + B/L^3.5         (L in micrometers)
+CC The 3 unknowns are solved exactly from the 3 (lambda, n) constraints,
+CC giving a fit error at machine precision (~1e-15).
+CC
+CC IMPORTANT: These coefficients are valid ONLY in a narrow band around
+CC 193.4 nm. Conrady extrapolation outside the LD range below is meaningless.
+CC ============================================================================
+CC
+NM FS_P 5 0 1.5601985 67.83 0 0 1
+ED 0.520000 0.570000 2.200000 0.000000 0 0
+CD 1.0967292267e+00 1.0267276883e-01 -2.1445978575e-04 0 0 0 0 0 0 0
+TD 0.000000 0.000000 0.000000 0.000000 0.000000 0.000000 22.000000
+OD -1.000000 -1.000000 -1.000000 -1.000000 -1.000000 -1.000000
+LD 0.193300 0.193500
+IT 0.193400 0.99975 1.000000
+CC
+CC ----------------------------------------------------------------------------
+CC
+NM CAF2_P 5 0 1.5013257 95.10 0 0 1
+ED 18.850000 18.850000 3.180000 0.000000 0 0
+CD 1.2126070619e+00 6.3960105646e-02 -1.3359799400e-04 0 0 0 0 0 0 0
+TD 0.000000 0.000000 0.000000 0.000000 0.000000 0.000000 22.000000
+OD -1.000000 -1.000000 -1.000000 -1.000000 -1.000000 -1.000000
+LD 0.193300 0.193500
+IT 0.193400 0.99950 1.000000
+CC
+CC ----------------------------------------------------------------------------
+CC
+CC ============================================================================
+CC 266 nm narrowband prescription glasses (4th harmonic Nd:YAG)
+CC ============================================================================
+CC FS_P2 and CAF2_P2 are narrowband prescription materials defined exactly at
+CC three wavelengths in the 266 nm band:
+CC     WV1 = 0.265985 um
+CC     WV2 = 0.266000 um
+CC     WV3 = 0.266015 um
+CC
+CC Conrady formula (Zemax FormulaType 5):  n(L) = n0 + A/L + B/L^3.5
+CC Three coefficients solved exactly from the three constraints; fit error
+CC at machine precision (~1e-14).
+CC
+CC IMPORTANT: Coefficients are valid ONLY in a narrow band around 266 nm.
+CC Conrady extrapolation outside the LD range is meaningless.
+CC ============================================================================
+CC
+NM FS_P2 5 0 1.4997923 67.83 0 0 1
+ED 0.520000 0.570000 2.200000 0.000000 0 0
+CD 1.3186589631e+00 5.5189681256e-02 -2.5574751629e-04 0 0 0 0 0 0 0
+TD 0.000000 0.000000 0.000000 0.000000 0.000000 0.000000 22.000000
+OD -1.000000 -1.000000 -1.000000 -1.000000 -1.000000 -1.000000
+LD 0.265900 0.266100
+IT 0.266000 0.99975 1.000000
+CC
+CC ----------------------------------------------------------------------------
+CC
+NM CAF2_P2 5 0 1.4620602 95.10 0 0 1
+ED 18.850000 18.850000 3.180000 0.000000 0 0
+CD 1.0325729059e+01 -3.3090379659e+00 3.4715427996e-02 0 0 0 0 0 0 0
+TD 0.000000 0.000000 0.000000 0.000000 0.000000 0.000000 22.000000
+OD -1.000000 -1.000000 -1.000000 -1.000000 -1.000000 -1.000000
+LD 0.265900 0.266100
+IT 0.266000 0.99950 1.000000
+CC
+CC ----------------------------------------------------------------------------
+CC ============================================================================
+CC VERIFICATION RECORD
+CC ============================================================================
+CC Numerically verified 2026-05-16 (Synapse Optics).
+CC Method: evaluate each glass from its own CD coefficients and compare
+CC against published / independent reference indices.
+CC
+CC HPFS Sellmeier glasses (formula 2), error in n_d vs Corning brochure:
+CC   HPFS_7980  n_d 1.4584612  V_d 67.79   |dn_d| 2.1e-07   PASS
+CC   HPFS_7979  n_d 1.4585216  V_d 67.79   |dn_d| 3.5e-07   PASS
+CC   HPFS_8655  n_d 1.4585216  V_d 67.79   |dn_d| 3.8e-07   PASS
+CC   Acceptance bar 1e-05; all three pass with ~2 orders of margin.
+CC   The 7979/8655 4-term->3-term Sellmeier re-fit holds to sub-micro
+CC   index across 185-2326 nm; the 3-term compromise is design-safe.
+CC
+CC Narrowband Conrady prescription glasses (formula 5):
+CC   FS_P    @193.400nm  n 1.5601985  exact 3-point solve (res ~2e-11)
+CC   CAF2_P  @193.400nm  n 1.5013257  exact 3-point solve (res ~9e-12)
+CC   FS_P2   @266.000nm  n 1.4997923  exact 3-point solve (res ~4e-11)
+CC   CAF2_P2 @266.000nm  n 1.4620602  exact 3-point solve (res ~2e-10)
+CC   Valid ONLY within the LD band; Conrady extrapolation outside the
+CC   LD range is meaningless. Host software must enforce LD limits.
+CC
+CC NM-line V_d slot set to 67.80 (Corning published) for the three HPFS
+CC glasses; true computed value 67.79. V_d slot is informational only -
+CC dispersion is derived from the CD coefficients, not this field.
+CC
+CC Format checks: no BOM; uniform CRLF; all ED-line Status fields = 0
+CC (ED-status trap closed - ZEMAX evaluates the dispersion formula).
+CC ============================================================================
+CC
+CC End of catalog

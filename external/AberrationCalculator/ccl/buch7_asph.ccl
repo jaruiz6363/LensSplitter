@@ -1,0 +1,3211 @@
+/**********************************************************************
+* cmd buch7_asph - third-, fifth- and seventh-order Buchdahl coefficients
+* of a centred system that may carry conics and even aspheres, as system
+* totals and SURFACE BY SURFACE.
+*
+* Written by Javier Ruiz with Claude Code, September 2026. The OSLO port
+* of macros/BUCH7_ASPH.ZPL in C:\GIT\AberrationCalculator. The front end
+* (lens data, the two paraxial rays) is written for OSLO; everything from
+* the macro's stage A on is translated from the macro statement for
+* statement by tools/zpl2ccl.py, so the arithmetic is the macro's own. The
+* macro and this program's C# are the references it is checked against.
+*
+* REFERENCES
+*
+*   H. A. Buchdahl, "Optical Aberration Coefficients", Dover 1968: Secs.
+*   41-44 (the fifth order, intrinsic and induced), 60, 65, 77-79 (the
+*   aspheric contributions), 84-85 (the tertiary scheme).
+*   H. A. Buchdahl, J. Opt. Soc. Am. 48, 563 (1958) (paper II) and 48, 747
+*   (1958) (paper III, Tables I and II).
+*
+* WHAT IT PRINTS
+*
+*   The third order (B F C Pi E), the fifth order (B5 F1 F2 M1 M2 M3 N1
+*   N2 N3 C5 Pi5 E5), B7, and the twenty seventh-order tau, as system
+*   totals in transverse measure.
+*
+*   With the first argument 1 (the default), also every surface:
+*
+*     - the third and fifth order and B7 split three ways. INTRINSIC is
+*       what the surface generates from its own curvature, indices and
+*       the rays arriving at it; FIGURING what its conic and AD, AE, AF
+*       add; INDUCED what the aberration already accumulated ahead of it
+*       produces in it. There is no induced term at third order;
+*     - each surface's induced share of its fifth order;
+*     - the twenty tau, surface by surface. These are per-surface totals:
+*       the seventh order is not split into intrinsic and induced, as the
+*       macro explains - no published derivation separates them.
+*
+*   Each column adds down to the system total printed with it.
+*
+* RUNNING IT
+*
+*   buch7_asph               per surface, current wavelength, report file
+*   buch7_asph 0             system totals only
+*   buch7_asph 1 2           at wavelength 2
+*   buch7_asph 1 0 0         without the report file
+*
+*   The report is added to the end of B7_REPORT (below), as well as going
+*   to the text window, so several lenses can be run into one file. Set
+*   it to a folder that exists; if it cannot be written, buch7_asph says
+*   so and carries on without it.
+*
+* LIMITS
+*
+*   Plane, spherical, conic and standard aspheric (AD, AE, AF) surfaces.
+*   AG, the r^10 term, cannot reach the seventh order and takes no part.
+*   Any other surface type - toric, spline, general asphere, perfect lens
+*   - is declined. A figured flat facing collimated light is declined for
+*   the seventh order (the third and fifth still stand). Rotationally
+*   symmetric and sequential; either conjugate; mirrors are carried in
+*   the sign of the index. At most 16 surfaces between object and image:
+*   the arrays are sized to fit CCL's 1 MB of global storage, which OSLO's
+*   own CCL shares.
+**********************************************************************/
+
+#define B7_REPORT  "C:/GIT/AberrationCalculator/ccl/buch7_asph.txt"
+#define B7_MAXS    18
+
+int b7_srfarg  {prompt = "Surface by surface (0 = system totals only, 1 = per surface)", lolim = 0, hilim = 1, default(noquery) = 1}
+int b7_wavarg  {prompt = "Wavelength number (0 = the current one)", lolim = 0, hilim = 10, default(noquery) = 0}
+int b7_filearg {prompt = "Also write the report file B7_REPORT (0 = no, 1 = yes)", lolim = 0, hilim = 1, default(noquery) = 1}
+
+static double b7_ns[B7_MAXS];        // index after surface i, signed by the mirror count
+static double b7_ya[B7_MAXS], b7_ua[B7_MAXS];   // basis ray, and the scratch the trace writes
+static double b7_ym[B7_MAXS], b7_um[B7_MAXS];   // marginal: height at i, slope after i
+static double b7_yc[B7_MAXS], b7_uc[B7_MAXS];   // chief
+static double b7_vfm[B7_MAXS][8];    // vertex form: curvature, conic, A4, A6, A8, figured
+static int    b7_nsm;
+static int    b7_fh, b7_wf;
+static char   b7_ln[400];
+
+// One line to the text window and, if it is open, the report.
+static cmd
+b7_out()
+{
+	printf("%s\n", b7_ln);
+	if (b7_wf)
+		fprintf(b7_fh, "%s\n", b7_ln);
+	strcpy(b7_ln, "");
+}
+
+// The paraxial ray with height y1 at surface 1 and slope u0 in object space, through every
+// optical surface: b7_ya[i] its height at surface i, b7_ua[i] its slope after surface i,
+// b7_ua[0] the object-space slope. The same recurrence as ParaxialTrace.Propagate.
+static int
+b7_prop(double pr_y1, double pr_u0)
+{
+	int    pr_i;
+	double pr_om, pr_t;
+
+	b7_ua[0] = pr_u0;
+	b7_ya[0] = 0.0;
+	pr_om = b7_ns[0]*pr_u0;
+	b7_ya[1] = pr_y1;
+	for (pr_i = 1; pr_i <= b7_nsm; pr_i++)
+	{
+		pr_om = pr_om - b7_ya[pr_i]*(b7_ns[pr_i] - b7_ns[pr_i - 1])*cv[pr_i];
+		b7_ua[pr_i] = pr_om/b7_ns[pr_i];
+		if (pr_i < b7_nsm)
+		{
+			pr_t = th[pr_i];
+			b7_ya[pr_i + 1] = b7_ya[pr_i] + pr_t*b7_ua[pr_i];
+		}
+	}
+	return (0);
+}
+
+
+// ---- generated from macros/BUCH7_ASPH.ZPL by zpl2ccl.py: globals ----
+static int    z_anyfig, z_brg, z_bri, z_brm, z_brp, z_brq, z_brr, z_brs, z_brw, z_chk;
+static int    z_dbg, z_dhm, z_ecj, z_ecm, z_ecs, z_eqj, z_eqm, z_eqs, z_exi, z_exj;
+static int    z_finite, z_flatbad, z_fmb, z_fmc, z_fmd, z_fmm, z_fmr, z_ga, z_gb, z_gc;
+static int    z_gdual, z_gfig, z_grun, z_i, z_j, z_k, z_k1, z_ka, z_kb, z_kc;
+static int    z_kd, z_kg, z_km, z_mb, z_nmon, z_nruns, z_nsm, z_pi2, z_pj, z_pma;
+static int    z_pmb, z_pmc, z_pmd, z_pme, z_pmf, z_pmi, z_pmj, z_pmk2, z_pmsa, z_pmsb;
+static int    z_pmsc, z_pmx, z_pqq, z_pqs, z_psb, z_psr, z_rs, z_scb, z_scst, z_sqb;
+static int    z_sqf, z_sqr, z_srf, z_tdb, z_tdd, z_tddg, z_tdg, z_tib, z_tig, z_tii;
+static int    z_tij, z_tim, z_tip, z_tipn, z_tipr, z_tjb, z_tjg, z_tji, z_tjm, z_tjp;
+static int    z_tzb, z_tzm, z_uj;
+static double    z_ab5, z_ab7, z_aba, z_abb, z_ac5, z_aca, z_acb, z_acb5, z_acbb, z_acc;
+static double    z_accb, z_ace, z_ace5b, z_aceb, z_acf, z_acfb, z_acpi, z_ae5, z_ae5b, z_aea;
+static double    z_aeb, z_af1, z_af2, z_afa, z_afb, z_afgcb, z_alph, z_am1, z_am2, z_am3;
+static double    z_an1, z_an2, z_an3, z_ap5, z_as1p1, z_as1p2, z_as1pa, z_as1pb, z_as1q1, z_as1q2;
+static double    z_as1qa, z_as2p1, z_as2p2, z_as2pa, z_as2pb, z_as3p1, z_as3p2, z_as3pa, z_as3pb, z_as4p1;
+static double    z_as4p2, z_as4pa, z_as4pb, z_as5p1, z_as5p2, z_as5pa, z_as5pb, z_as6p1, z_as6p2, z_as6pa;
+static double    z_as6pb, z_aterm, z_ba, z_bb, z_beta, z_brv, z_bterm, z_c1, z_c1b, z_c2;
+static double    z_c2b, z_c3, z_c3b, z_ca, z_cb, z_conic, z_cterm, z_cv, z_cv2, z_cv3;
+static double    z_d3, z_deln, z_dha, z_dhbase, z_dhc, z_dhc1, z_dhc2, z_dhc3, z_dhi, z_dhic;
+static double    z_dhj, z_dhjc, z_dhk, z_dhn, z_dhq, z_dhq1, z_dhq2, z_dhq3, z_dhq4, z_dhs1;
+static double    z_dhv, z_dhvp, z_dhvq, z_dhw2, z_dhy, z_dhyq, z_ea, z_eb, z_ecw, z_efac;
+static double    z_efl, z_epp, z_epr, z_eps, z_eqw, z_exc, z_excc, z_exv, z_exvv, z_exy;
+static double    z_exyy, z_f2s, z_f3s, z_fa, z_fb, z_fmq, z_fnum, z_gam1, z_gam2, z_gam3;
+static double    z_gamm, z_goe, z_h2, z_h3, z_h4, z_h5, z_h6, z_h7, z_hmax, z_hobj;
+static double    z_ib5, z_ib7, z_ic5, z_ie5, z_ie5b, z_if1, z_if2, z_im1, z_im2, z_im3;
+static double    z_in1, z_in2, z_in3, z_iota, z_ip5, z_j0a, z_j0b, z_kk, z_km1, z_la;
+static double    z_lag, z_lamb, z_lb, z_lq3, z_mm, z_muu, z_n0abs, z_na, z_nb, z_nlsig;
+static double    z_nuu, z_objd, z_pai, z_paic, z_paicp, z_paip, z_pe2, z_pe3, z_ph1, z_ph2;
+static double    z_ph3, z_ph4, z_ph5, z_ph6, z_pk2, z_pms, z_pmt, z_pmu, z_pmv, z_psbq;
+static double    z_pscar, z_psch, z_psq, z_psz, z_pt0, z_pu, z_pu0, z_pu1, z_pu2, z_pu3;
+static double    z_puc, z_pucp, z_puk, z_pup, z_py, z_pyc, z_pycsq, z_pysq, z_pz, z_q1p;
+static double    z_q1q, z_q2p, z_q3p, z_q4p, z_q5p, z_q6p, z_sa1, z_sa2, z_sa3, z_sb5;
+static double    z_sb7, z_sc5, z_sca, z_scab, z_sccc, z_scm2, z_scm3, z_scm4, z_scm5, z_scm6;
+static double    z_scn2, z_scn3, z_scn4, z_scn5, z_scn6, z_scq1, z_scq2, z_scq2b, z_scq3, z_scq4;
+static double    z_scq5, z_scq6, z_scqc, z_scqo, z_scs1, z_scs2, z_scs3, z_scs4, z_scs5, z_scs6;
+static double    z_scv1, z_scv2, z_scv3, z_scw1, z_scw2, z_scw3, z_se5, z_sf1, z_sf2, z_sfc;
+static double    z_sfc0, z_sfc1, z_sfc2, z_sfc3, z_sfk, z_sfm, z_sm1, z_sm2, z_sm3, z_sn1;
+static double    z_sn2, z_sn3, z_sp5, z_sqa2, z_sqa3, z_sqac, z_sqap, z_sqaq, z_sqba, z_sqbb;
+static double    z_sqbc, z_sqbd, z_sqbe, z_sqbf, z_sqbp, z_sqbq, z_sqc2, z_sqcc, z_sqcp, z_sqcq;
+static double    z_sqd1, z_sqd2, z_sqd3, z_sqdp, z_sqdp2, z_sqdpq, z_sqdq, z_sqdq2, z_sqep, z_sqeq;
+static double    z_sqfp, z_sqfq, z_sqo11, z_sqo14, z_sqo15, z_sqo8, z_sqo9, z_sqp1, z_sqq1, z_sqvp;
+static double    z_sqvq, z_stopp, z_sumb, z_sumc, z_sume, z_sumf, z_sump, z_t1p, z_t2q, z_tau1s;
+static double    z_tb5, z_tb7, z_tc5, z_te5, z_te5b, z_tf1, z_tf2, z_ti23f, z_ti23p, z_ti24p;
+static double    z_ti2s, z_ti81f, z_ti82f, z_ti9s, z_tia, z_tiab, z_tiaf, z_tiap, z_tibb, z_tic;
+static double    z_tic13, z_ticar, z_ticb, z_ticc, z_ticf, z_ticg, z_ticoi, z_tid, z_tidl, z_tig2;
+static double    z_tigoe, z_tiinc, z_tiiq, z_tijc, z_tik, z_tilag, z_tin, z_tina, z_tinb, z_tinrm;
+static double    z_tiq3, z_tiq4, z_tiqc, z_tirho, z_tirhp, z_tisw, z_tivp, z_tivpr, z_tivq, z_tiw;
+static double    z_tiy, z_tiz, z_tj34, z_tj48, z_tj49, z_tj58, z_tj64, z_tj81, z_tj9s, z_tja3;
+static double    z_tjaf, z_tjap, z_tjbr, z_tjc, z_tjcar, z_tjci, z_tjcy, z_tjdr, z_tjf0, z_tjf1;
+static double    z_tjf2, z_tjf3, z_tjf4, z_tjf5, z_tji2, z_tjii, z_tjiq, z_tjk, z_tjld, z_tjn;
+static double    z_tjom, z_tjpo, z_tjpy, z_tjr2, z_tjr3, z_tjr4, z_tjr5, z_tjr6, z_tjrr, z_tjs1;
+static double    z_tjs2, z_tjs3, z_tjs4, z_tjs5, z_tjs6, z_tjwr, z_tjy, z_tm1, z_tm2, z_tm3;
+static double    z_tmp, z_tn1, z_tn2, z_tn3, z_tp5, z_tq, z_ufr, z_uin, z_um, z_umt;
+static double    z_up2, z_up3, z_up4, z_up5, z_up6, z_up7, z_utt, z_uz, z_vpk, z_w;
+static double    z_ws1, z_ws2, z_ws3, z_ws4, z_ws5, z_x42, z_x42b, z_x73, z_x74, z_x75;
+static double    z_x76, z_x77, z_x78, z_x82, z_x82b, z_z;
+static double z_vfm[19][9];
+static double z_cub[3][13];
+static int    z_mon[7][71];
+static double z_scr[3][69];
+static double z_mq[37][19];
+static double z_fo[19][61];
+static double z_pw[41][67];
+static double z_pc[19][113];
+static double z_pcf[19][5];
+static double z_tt[79][161];
+static double z_yf[79][31];
+static double z_rv[79][80];
+static double z_ai[79][9];
+static double z_bw[5][10];
+static double z_sc[13][13];
+static double z_dh[9][9];
+static double z_tz[5][13];
+static double z_po[13][13];
+static double z_sv[6][33];
+static double z_pt[19][23];
+static double z_tw[19][23];
+static double z_vec2[520];
+static double z_vec3[520];
+static double z_vec4[42];
+static char   z_unot[100];
+static char   b7_tmp[100];
+
+static int
+z_zero()
+{
+	int zi, zj;
+	for (zi = 0; zi < 19; zi++) for (zj = 0; zj < 9; zj++) z_vfm[zi][zj] = 0;
+	for (zi = 0; zi < 3; zi++) for (zj = 0; zj < 13; zj++) z_cub[zi][zj] = 0;
+	for (zi = 0; zi < 7; zi++) for (zj = 0; zj < 71; zj++) z_mon[zi][zj] = 0;
+	for (zi = 0; zi < 3; zi++) for (zj = 0; zj < 69; zj++) z_scr[zi][zj] = 0;
+	for (zi = 0; zi < 37; zi++) for (zj = 0; zj < 19; zj++) z_mq[zi][zj] = 0;
+	for (zi = 0; zi < 19; zi++) for (zj = 0; zj < 61; zj++) z_fo[zi][zj] = 0;
+	for (zi = 0; zi < 41; zi++) for (zj = 0; zj < 67; zj++) z_pw[zi][zj] = 0;
+	for (zi = 0; zi < 19; zi++) for (zj = 0; zj < 113; zj++) z_pc[zi][zj] = 0;
+	for (zi = 0; zi < 19; zi++) for (zj = 0; zj < 5; zj++) z_pcf[zi][zj] = 0;
+	for (zi = 0; zi < 79; zi++) for (zj = 0; zj < 161; zj++) z_tt[zi][zj] = 0;
+	for (zi = 0; zi < 79; zi++) for (zj = 0; zj < 31; zj++) z_yf[zi][zj] = 0;
+	for (zi = 0; zi < 79; zi++) for (zj = 0; zj < 80; zj++) z_rv[zi][zj] = 0;
+	for (zi = 0; zi < 79; zi++) for (zj = 0; zj < 9; zj++) z_ai[zi][zj] = 0;
+	for (zi = 0; zi < 5; zi++) for (zj = 0; zj < 10; zj++) z_bw[zi][zj] = 0;
+	for (zi = 0; zi < 13; zi++) for (zj = 0; zj < 13; zj++) z_sc[zi][zj] = 0;
+	for (zi = 0; zi < 9; zi++) for (zj = 0; zj < 9; zj++) z_dh[zi][zj] = 0;
+	for (zi = 0; zi < 5; zi++) for (zj = 0; zj < 13; zj++) z_tz[zi][zj] = 0;
+	for (zi = 0; zi < 13; zi++) for (zj = 0; zj < 13; zj++) z_po[zi][zj] = 0;
+	for (zi = 0; zi < 6; zi++) for (zj = 0; zj < 33; zj++) z_sv[zi][zj] = 0;
+	for (zi = 0; zi < 19; zi++) for (zj = 0; zj < 23; zj++) z_pt[zi][zj] = 0;
+	for (zi = 0; zi < 19; zi++) for (zj = 0; zj < 23; zj++) z_tw[zi][zj] = 0;
+	for (zi = 0; zi < 520; zi++) z_vec2[zi] = 0.0;
+	for (zi = 0; zi < 520; zi++) z_vec3[zi] = 0.0;
+	for (zi = 0; zi < 42; zi++) z_vec4[zi] = 0.0;
+	return (0);
+}
+
+// ---- generated: the macro's subroutines ----
+static int
+z_s_pmk()
+{
+	for (z_ka = 1; z_ka <= 64; z_ka = z_ka + (1))
+	{
+		z_mon[1][z_ka] = 0;
+	}
+	z_km = 0;
+	for (z_kd = 0; z_kd <= 3; z_kd = z_kd + (1))
+	{
+		for (z_ka = z_kd; z_ka >= 0; z_ka = z_ka + (-1))
+		{
+			for (z_kb = z_kd - z_ka; z_kb >= 0; z_kb = z_kb + (-1))
+			{
+				z_kc = z_kd - z_ka - z_kb;
+				z_km = z_km + 1;
+				z_mon[1][1 + z_ka * 16 + z_kb * 4 + z_kc] = z_km;
+				z_mon[2][z_km] = z_ka;
+				z_mon[3][z_km] = z_kb;
+				z_mon[4][z_km] = z_kc;
+				z_mon[5][z_km] = 1 + z_ka * 16 + z_kb * 4 + z_kc;
+			}
+		}
+	}
+	z_nmon = z_km;
+	z_mon[6][1] = 0;
+	z_mon[6][2] = 1;
+	z_mon[6][3] = 2;
+	z_mon[6][4] = 2;
+	z_mon[6][5] = 3;
+	z_mon[6][6] = 4;
+	z_mon[6][7] = 3;
+	z_mon[6][8] = 4;
+	z_mon[6][9] = 5;
+	z_mon[6][10] = 6;
+	return (0);
+}
+
+static int
+z_s_pmul()
+{
+	z_pmsa = z_ga;
+	z_pmsb = z_gb;
+	z_pmsc = z_gc;
+	for (z_pmj = 1; z_pmj <= 64; z_pmj = z_pmj + (1))
+	{
+		z_scr[1][z_pmj] = 0;
+	}
+	for (z_pmi = 1; z_pmi <= z_nmon; z_pmi = z_pmi + (1))
+	{
+		z_pmu = z_pw[z_pmsa][z_mon[5][z_pmi]];
+		if (z_pmu != 0)
+		{
+			z_pma = z_mon[2][z_pmi];
+			z_pmb = z_mon[3][z_pmi];
+			z_pmc = z_mon[4][z_pmi];
+			for (z_pmk2 = 1; z_pmk2 <= z_nmon; z_pmk2 = z_pmk2 + (1))
+			{
+				z_pmv = z_pw[z_pmsb][z_mon[5][z_pmk2]];
+				if (z_pmv != 0)
+				{
+					z_pmd = z_pma + z_mon[2][z_pmk2];
+					z_pme = z_pmb + z_mon[3][z_pmk2];
+					z_pmf = z_pmc + z_mon[4][z_pmk2];
+					if (z_pmd + z_pme + z_pmf < 4)
+					{
+						z_pmx = 1 + z_pmd * 16 + z_pme * 4 + z_pmf;
+						z_scr[1][z_pmx] = z_scr[1][z_pmx] + z_pmu * z_pmv;
+					}
+				}
+			}
+		}
+	}
+	for (z_pmj = 1; z_pmj <= 64; z_pmj = z_pmj + (1))
+	{
+		z_pw[z_pmsc][z_pmj] = z_scr[1][z_pmj];
+	}
+	return (0);
+}
+
+static int
+z_s_pcubs()
+{
+	z_pqs = z_ga;
+	z_cub[1][1] = z_pw[z_pqs][1 + 3 * 16];
+	z_cub[1][2] = z_pw[z_pqs][1 + 2 * 16 + 4];
+	z_cub[1][3] = z_pw[z_pqs][1 + 2 * 16 + 1];
+	z_cub[1][4] = z_pw[z_pqs][1 + 16 + 2 * 4];
+	z_cub[1][5] = z_pw[z_pqs][1 + 16 + 4 + 1];
+	z_cub[1][6] = z_pw[z_pqs][1 + 16 + 2];
+	z_cub[1][7] = z_pw[z_pqs][1 + 3 * 4];
+	z_cub[1][8] = z_pw[z_pqs][1 + 2 * 4 + 1];
+	z_cub[1][9] = z_pw[z_pqs][1 + 4 + 2];
+	z_cub[1][10] = z_pw[z_pqs][1 + 3];
+	return (0);
+}
+
+static int
+z_s_pquad()
+{
+	z_pqq = z_ga;
+	z_cub[1][1] = z_pw[z_pqq][1 + 2 * 16];
+	z_cub[1][2] = z_pw[z_pqq][1 + 16 + 4];
+	z_cub[1][3] = z_pw[z_pqq][1 + 16 + 1];
+	z_cub[1][4] = z_pw[z_pqq][1 + 2 * 4];
+	z_cub[1][5] = z_pw[z_pqq][1 + 4 + 1];
+	z_cub[1][6] = z_pw[z_pqq][1 + 2];
+	return (0);
+}
+
+static int
+z_s_pcub3()
+{
+	z_ga = 3;
+	z_s_pcubs();
+	return (0);
+}
+
+static int
+z_s_pcub4()
+{
+	z_ga = 4;
+	z_s_pcubs();
+	return (0);
+}
+
+static int
+z_s_psurf()
+{
+	z_pu1 = z_sa1;
+	z_pu2 = z_sa2;
+	z_pu3 = z_sa3;
+	z_puk = z_sfk;
+	z_pu0 = z_sfc0;
+	for (z_pj = 1; z_pj <= 40; z_pj = z_pj + (1))
+	{
+		for (z_pi2 = 1; z_pi2 <= 64; z_pi2 = z_pi2 + (1))
+		{
+			z_pw[z_pj][z_pi2] = 0;
+		}
+	}
+	z_ph1 = z_pu0 / 2;
+	z_ph2 = z_ph1 * z_ph1;
+	z_ph3 = z_ph2 * z_ph1;
+	z_ph4 = z_ph3 * z_ph1;
+	z_ph5 = z_ph4 * z_ph1;
+	z_ph6 = z_ph5 * z_ph1;
+	z_pk2 = z_puk * z_puk;
+	z_pms = 1 / (2 * z_puk);
+	z_pmt = (z_puk - 1) / (2 * z_puk);
+	z_pt0 = (1 - z_puk) / (2 * z_puk);
+	z_pw[10][1 + 16] = z_pms * 0.5 * z_pu0 * z_pu0;
+	z_pw[10][1 + 4] = z_pms * (-z_pk2 * z_pu0);
+	z_pw[10][1 + 1] = z_pms * (z_pk2 - 1);
+	z_pw[11][1 + 2 * 16] = z_pms * (1.5 * z_ph1 * z_pu1 + 2 * z_ph4);
+	z_pw[11][1 + 16 + 4] = z_pms * (-(z_pk2 * z_pu1 + 4 * z_ph3));
+	z_pw[11][1 + 16 + 1] = z_pms * (2 * z_ph2);
+	z_pw[12][1 + 3 * 16] = z_pms * (4 * z_ph1 * z_pu2 / 3 + 4 * z_ph3 * z_pu1 + 0.25 * z_pu1 * z_pu1 + 4 * z_ph6);
+	z_pw[12][1 + 2 * 16 + 4] = z_pms * (-(z_pk2 * z_pu2 + (z_pk2 + 7) * z_ph2 * z_pu1 + 12 * z_ph5));
+	z_pw[12][1 + 2 * 16 + 1] = z_pms * (1.5 * z_ph1 * z_pu1 + 4 * z_ph4);
+	z_pw[12][1 + 16 + 2 * 4] = z_pms * (z_pk2 * z_pu0 * z_pu1 + 8 * z_ph4);
+	z_pw[12][1 + 16 + 4 + 1] = z_pms * (-4 * z_ph3);
+	z_pw[13][1 + 16] = z_pmt * ((z_pk2 + 1) * z_pu0 * z_pu0);
+	z_pw[13][1 + 4] = z_pmt * (-2 * z_pk2 * z_pu0);
+	z_pw[13][1 + 1] = z_pmt * (z_pk2 - 1);
+	z_pw[14][1 + 2 * 16] = z_pmt * ((4 * z_pk2 + 3) * z_ph1 * z_pu1);
+	z_pw[14][1 + 16 + 4] = z_pmt * (-(2 * z_pk2 * z_pu1 + z_pu0 * z_pu0 * z_pu0));
+	z_pw[14][1 + 16 + 1] = z_pmt * (z_pu0 * z_pu0);
+	z_pw[15][1 + 3 * 16] = z_pmt * ((2 * z_pk2 + 4 / 3) * z_pu0 * z_pu2 + (z_pk2 + 0.5) * z_pu1 * z_pu1 + (4 * z_pk2 + 2) * z_ph3 * z_pu1);
+	z_pw[15][1 + 2 * 16 + 4] = z_pmt * (-(2 * z_pk2 * z_pu2 + (10 * z_pk2 + 14) * z_ph2 * z_pu1 + 8 * z_ph5));
+	z_pw[15][1 + 2 * 16 + 1] = z_pmt * (3 * z_ph1 * z_pu1 + 4 * z_ph4);
+	z_pw[15][1 + 16 + 2 * 4] = z_pmt * (2 * z_pk2 * z_pu0 * z_pu1 + z_pu0 * z_pu0 * z_pu0 * z_pu0);
+	z_pw[15][1 + 16 + 4 + 1] = z_pmt * (-z_pu0 * z_pu0 * z_pu0);
+	for (z_pi2 = 1; z_pi2 <= 64; z_pi2 = z_pi2 + (1))
+	{
+		z_pw[1][z_pi2] = z_pw[13][z_pi2] + 2 * z_pw[10][z_pi2];
+	}
+	z_pw[1][1 + 1] = z_pw[1][1 + 1] + (1 + z_puk) / (2 * z_puk);
+	z_ga = 1;
+	z_gb = 1;
+	z_gc = 16;
+	z_s_pmul();
+	for (z_pi2 = 1; z_pi2 <= 64; z_pi2 = z_pi2 + (1))
+	{
+		z_pw[17][z_pi2] = z_pw[13][z_pi2] + z_pw[10][z_pi2];
+	}
+	z_ga = 17;
+	z_gb = 1;
+	z_gc = 18;
+	z_s_pmul();
+	for (z_pi2 = 1; z_pi2 <= 64; z_pi2 = z_pi2 + (1))
+	{
+		z_pw[2][z_pi2] = z_pt0 * z_pw[16][z_pi2] + 2 * z_pw[18][z_pi2] + z_pw[14][z_pi2] + 2 * z_pw[11][z_pi2];
+	}
+	for (z_pi2 = 1; z_pi2 <= 64; z_pi2 = z_pi2 + (1))
+	{
+		z_pw[17][z_pi2] = z_pt0 * z_pw[1][z_pi2] + z_pw[13][z_pi2] + z_pw[10][z_pi2];
+	}
+	z_ga = 17;
+	z_gb = 2;
+	z_gc = 18;
+	z_s_pmul();
+	z_ga = 13;
+	z_gb = 1;
+	z_gc = 19;
+	z_s_pmul();
+	for (z_pi2 = 1; z_pi2 <= 64; z_pi2 = z_pi2 + (1))
+	{
+		z_pw[17][z_pi2] = z_pw[19][z_pi2] + 2 * z_pw[14][z_pi2] + 2 * z_pw[11][z_pi2];
+	}
+	z_ga = 17;
+	z_gb = 1;
+	z_gc = 19;
+	z_s_pmul();
+	for (z_pi2 = 1; z_pi2 <= 64; z_pi2 = z_pi2 + (1))
+	{
+		z_pw[3][z_pi2] = 2 * z_pw[18][z_pi2] + z_pw[19][z_pi2] + z_pw[15][z_pi2] + 2 * z_pw[12][z_pi2];
+	}
+	z_pw[5][1 + 16] = z_pu1;
+	z_pw[6][1 + 2 * 16] = z_pu2 + z_ph2 * z_pu1;
+	z_pw[6][1 + 16 + 4] = -z_pu0 * z_pu1;
+	z_pw[7][1 + 3 * 16] = z_pu3 + z_pu0 * z_pu0 * z_pu2 / 3 + z_ph1 * z_pu1 * z_pu1 + 2 * z_ph4 * z_pu1;
+	z_pw[7][1 + 2 * 16 + 4] = -(2 * z_pu0 * z_pu2 + 6 * z_ph3 * z_pu1 + 0.5 * z_pu1 * z_pu1);
+	z_pw[7][1 + 2 * 16 + 1] = z_ph2 * z_pu1;
+	z_pw[7][1 + 16 + 2 * 4] = z_pu0 * z_pu0 * z_pu1;
+	z_pe2 = z_pu0 * z_pu0 * z_pu0 / 8 + z_pu1 / 4;
+	z_pe3 = z_pu0 * z_pu0 * z_pu0 * z_pu0 * z_pu0 / 16 + z_pu0 * z_pu0 * z_pu1 / 4 + z_pu2 / 6;
+	z_pw[8][1 + 16] = z_ph1;
+	z_pw[9][1 + 2 * 16] = z_pe2;
+	z_pw[9][1 + 16 + 4] = -2 * z_ph2;
+	for (z_pi2 = 1; z_pi2 <= 64; z_pi2 = z_pi2 + (1))
+	{
+		z_pw[19][z_pi2] = 0;
+	}
+	z_pw[19][1 + 3 * 16] = z_pe3;
+	z_pw[19][1 + 2 * 16 + 4] = -6 * z_ph1 * z_pe2;
+	z_pw[19][1 + 2 * 16 + 1] = z_ph3;
+	z_pw[19][1 + 16 + 2 * 4] = 4 * z_ph3;
+	z_ga = 8;
+	z_gb = 2;
+	z_gc = 16;
+	z_s_pmul();
+	z_ga = 9;
+	z_gb = 1;
+	z_gc = 17;
+	z_s_pmul();
+	for (z_pi2 = 1; z_pi2 <= 64; z_pi2 = z_pi2 + (1))
+	{
+		z_pw[4][z_pi2] = z_pw[16][z_pi2] + z_pw[17][z_pi2] + z_pw[19][z_pi2];
+	}
+	return (0);
+}
+
+static int
+z_s_bridge()
+{
+	z_brs = 1;
+	if (z_grun == 4) { z_brs = 2; }
+	z_brp = z_grun - 1;
+	z_brg = (z_brp - 1) * (z_nsm + 2) + 1;
+	for (z_brq = 1; z_brq <= 7; z_brq = z_brq + (1))
+	{
+		z_bw[1][z_brq] = 0;
+		z_bw[2][z_brq] = 0;
+	}
+	for (z_bri = 1; z_bri <= z_nsm; z_bri = z_bri + (1))
+	{
+		z_brm = (z_brs - 1) * (z_nsm + 2) + z_bri;
+		z_brw = z_brg + z_bri;
+		z_bw[3][1] = z_tt[z_brw][10];
+		z_bw[3][2] = z_tt[z_brw][38];
+		z_bw[3][3] = z_tt[z_brw][44];
+		z_bw[3][4] = z_tt[z_brw][50];
+		z_bw[3][5] = z_tt[z_brw][54];
+		z_bw[3][6] = z_tt[z_brw][59];
+		z_bw[3][7] = z_tt[z_brw][65];
+		for (z_brq = 1; z_brq <= 7; z_brq = z_brq + (1))
+		{
+			z_brv = z_mq[z_brm][z_brq];
+			if (fabs(z_brv) > z_bw[2][z_brq])
+			{
+				z_bw[2][z_brq] = fabs(z_brv);
+				z_bw[1][z_brq] = z_bw[3][z_brq] / z_brv;
+			}
+		}
+	}
+	for (z_bri = 1; z_bri <= z_nsm; z_bri = z_bri + (1))
+	{
+		z_brm = (z_brs - 1) * (z_nsm + 2) + z_bri;
+		z_brr = (z_grun - 1) * (z_nsm + 2) + 1 + z_bri;
+		for (z_brq = 1; z_brq <= 7; z_brq = z_brq + (1))
+		{
+			z_ai[z_brr][z_brq] = z_bw[1][z_brq] * z_mq[z_brm][7 + z_brq];
+		}
+	}
+	if (z_chk == 1)
+	{
+		strcat(b7_ln, " "); b7_out();
+		strcat(b7_ln, "Bridge constants, pass "); sprintf(b7_tmp, "%3.0f", 1.0*(z_grun)); strcat(b7_ln, b7_tmp); strcat(b7_ln, " - the same on every surface or the"); b7_out();
+		strcat(b7_ln, "pairing is wrong and everything built on the increments is meaningless."); b7_out();
+		strcat(b7_ln, "   a_p "); sprintf(b7_tmp, "%15.6e", 1.0*(z_bw[1][1])); strcat(b7_ln, b7_tmp); strcat(b7_ln, "  S1p "); sprintf(b7_tmp, "%15.6e", 1.0*(z_bw[1][2])); strcat(b7_ln, b7_tmp); strcat(b7_ln, "  S2p "); sprintf(b7_tmp, "%15.6e", 1.0*(z_bw[1][3])); strcat(b7_ln, b7_tmp); b7_out();
+		strcat(b7_ln, "   S3p "); sprintf(b7_tmp, "%15.6e", 1.0*(z_bw[1][4])); strcat(b7_ln, b7_tmp); strcat(b7_ln, "  S4p "); sprintf(b7_tmp, "%15.6e", 1.0*(z_bw[1][5])); strcat(b7_ln, b7_tmp); strcat(b7_ln, "  S5p "); sprintf(b7_tmp, "%15.6e", 1.0*(z_bw[1][6])); strcat(b7_ln, b7_tmp); b7_out();
+		strcat(b7_ln, "   S6p "); sprintf(b7_tmp, "%15.6e", 1.0*(z_bw[1][7])); strcat(b7_ln, b7_tmp); b7_out();
+	}
+	return (0);
+}
+
+static int
+z_s_exbas()
+{
+	z_exy = z_exyy;
+	z_exv = z_exvv;
+	z_exc = z_excc;
+	for (z_exj = 25; z_exj <= 40; z_exj = z_exj + (1))
+	{
+		for (z_exi = 1; z_exi <= 64; z_exi = z_exi + (1))
+		{
+			z_pw[z_exj][z_exi] = 0;
+		}
+	}
+	for (z_exj = 1; z_exj <= 64; z_exj = z_exj + (1))
+	{
+		z_pw[23][z_exj] = 0;
+		z_pw[24][z_exj] = 0;
+		z_pw[20][z_exj] = 0;
+	}
+	z_pw[23][1 + 16] = z_exy * z_exy;
+	z_pw[23][1 + 4] = 2 * z_exy;
+	z_pw[23][1 + 1] = 1;
+	z_pw[24][1 + 16] = z_exy * z_exv;
+	z_pw[24][1 + 4] = z_exc * z_exy + z_exv;
+	z_pw[24][1 + 1] = z_exc;
+	z_pw[20][1 + 16] = z_exv * z_exv;
+	z_pw[20][1 + 4] = 2 * z_exc * z_exv;
+	z_pw[20][1 + 1] = z_exc * z_exc;
+	z_ga = 23;
+	z_gb = 23;
+	z_gc = 35;
+	z_s_pmul();
+	z_ga = 23;
+	z_gb = 24;
+	z_gc = 36;
+	z_s_pmul();
+	z_ga = 23;
+	z_gb = 20;
+	z_gc = 37;
+	z_s_pmul();
+	z_ga = 24;
+	z_gb = 24;
+	z_gc = 38;
+	z_s_pmul();
+	z_ga = 24;
+	z_gb = 20;
+	z_gc = 39;
+	z_s_pmul();
+	z_ga = 20;
+	z_gb = 20;
+	z_gc = 40;
+	z_s_pmul();
+	z_ga = 35;
+	z_gb = 23;
+	z_gc = 25;
+	z_s_pmul();
+	z_ga = 35;
+	z_gb = 24;
+	z_gc = 26;
+	z_s_pmul();
+	z_ga = 35;
+	z_gb = 20;
+	z_gc = 27;
+	z_s_pmul();
+	z_ga = 38;
+	z_gb = 23;
+	z_gc = 28;
+	z_s_pmul();
+	z_ga = 36;
+	z_gb = 20;
+	z_gc = 29;
+	z_s_pmul();
+	z_ga = 40;
+	z_gb = 23;
+	z_gc = 30;
+	z_s_pmul();
+	z_ga = 38;
+	z_gb = 24;
+	z_gc = 31;
+	z_s_pmul();
+	z_ga = 38;
+	z_gb = 20;
+	z_gc = 32;
+	z_s_pmul();
+	z_ga = 40;
+	z_gb = 24;
+	z_gc = 33;
+	z_s_pmul();
+	z_ga = 40;
+	z_gb = 20;
+	z_gc = 34;
+	z_s_pmul();
+	return (0);
+}
+
+static int
+z_s_excub()
+{
+	for (z_ecj = 1; z_ecj <= 10; z_ecj = z_ecj + (1))
+	{
+		z_cub[1][z_ecj] = 0;
+	}
+	for (z_ecm = 1; z_ecm <= 10; z_ecm = z_ecm + (1))
+	{
+		z_ecw = z_cub[2][z_ecm];
+		if (z_ecw != 0)
+		{
+			z_ecs = 24 + z_ecm;
+			z_cub[1][1] = z_cub[1][1] + z_ecw * z_pw[z_ecs][1 + 3 * 16];
+			z_cub[1][2] = z_cub[1][2] + z_ecw * z_pw[z_ecs][1 + 2 * 16 + 4];
+			z_cub[1][3] = z_cub[1][3] + z_ecw * z_pw[z_ecs][1 + 2 * 16 + 1];
+			z_cub[1][4] = z_cub[1][4] + z_ecw * z_pw[z_ecs][1 + 16 + 2 * 4];
+			z_cub[1][5] = z_cub[1][5] + z_ecw * z_pw[z_ecs][1 + 16 + 4 + 1];
+			z_cub[1][6] = z_cub[1][6] + z_ecw * z_pw[z_ecs][1 + 16 + 2];
+			z_cub[1][7] = z_cub[1][7] + z_ecw * z_pw[z_ecs][1 + 3 * 4];
+			z_cub[1][8] = z_cub[1][8] + z_ecw * z_pw[z_ecs][1 + 2 * 4 + 1];
+			z_cub[1][9] = z_cub[1][9] + z_ecw * z_pw[z_ecs][1 + 4 + 2];
+			z_cub[1][10] = z_cub[1][10] + z_ecw * z_pw[z_ecs][1 + 3];
+		}
+	}
+	return (0);
+}
+
+static int
+z_s_exqua()
+{
+	for (z_eqj = 1; z_eqj <= 6; z_eqj = z_eqj + (1))
+	{
+		z_cub[1][z_eqj] = 0;
+	}
+	for (z_eqm = 1; z_eqm <= 6; z_eqm = z_eqm + (1))
+	{
+		z_eqw = z_cub[2][z_eqm];
+		if (z_eqw != 0)
+		{
+			z_eqs = 34 + z_eqm;
+			z_cub[1][1] = z_cub[1][1] + z_eqw * z_pw[z_eqs][1 + 2 * 16];
+			z_cub[1][2] = z_cub[1][2] + z_eqw * z_pw[z_eqs][1 + 16 + 4];
+			z_cub[1][3] = z_cub[1][3] + z_eqw * z_pw[z_eqs][1 + 16 + 1];
+			z_cub[1][4] = z_cub[1][4] + z_eqw * z_pw[z_eqs][1 + 2 * 4];
+			z_cub[1][5] = z_cub[1][5] + z_eqw * z_pw[z_eqs][1 + 4 + 1];
+			z_cub[1][6] = z_cub[1][6] + z_eqw * z_pw[z_eqs][1 + 2];
+		}
+	}
+	return (0);
+}
+
+static int
+z_s_dhalf()
+{
+	z_dhi = z_dhc * z_dhy - z_dhv;
+	z_dhq = 0;
+	if (fabs(z_dhi) > 1E-30) { z_dhq = (z_dhc * z_dhyq - z_dhvq) / z_dhi; }
+	z_dhj = -z_dhv * z_dhq + z_dhvq;
+	z_sfk = z_dhk;
+	z_sfc0 = z_dhc;
+	z_sa1 = z_dhc1;
+	z_sa2 = z_dhc2;
+	z_sa3 = z_dhc3;
+	z_s_psurf();
+	z_ga = 2;
+	z_s_pquad();
+	for (z_dhm = 1; z_dhm <= 6; z_dhm = z_dhm + (1))
+	{
+		z_dh[1][z_dhm] = z_cub[1][z_dhm];
+	}
+	z_ga = 8;
+	z_gb = 1;
+	z_gc = 21;
+	z_s_pmul();
+	for (z_dhm = 1; z_dhm <= 64; z_dhm = z_dhm + (1))
+	{
+		z_pw[22][z_dhm] = z_pw[21][z_dhm] + z_pw[9][z_dhm];
+	}
+	z_ga = 22;
+	z_s_pquad();
+	for (z_dhm = 1; z_dhm <= 6; z_dhm = z_dhm + (1))
+	{
+		z_dh[2][z_dhm] = z_cub[1][z_dhm];
+	}
+	z_sa1 = 0;
+	z_sa2 = 0;
+	z_sa3 = 0;
+	z_s_psurf();
+	z_ga = 2;
+	z_s_pquad();
+	for (z_dhm = 1; z_dhm <= 6; z_dhm = z_dhm + (1))
+	{
+		z_dh[3][z_dhm] = z_cub[1][z_dhm];
+	}
+	z_ga = 8;
+	z_gb = 1;
+	z_gc = 21;
+	z_s_pmul();
+	for (z_dhm = 1; z_dhm <= 64; z_dhm = z_dhm + (1))
+	{
+		z_pw[22][z_dhm] = z_pw[21][z_dhm] + z_pw[9][z_dhm];
+	}
+	z_ga = 22;
+	z_s_pquad();
+	for (z_dhm = 1; z_dhm <= 6; z_dhm = z_dhm + (1))
+	{
+		z_dh[4][z_dhm] = z_cub[1][z_dhm];
+	}
+	z_exyy = z_dhy;
+	z_exvv = z_dhv;
+	z_excc = z_dhc;
+	z_s_exbas();
+	z_dhvp = (1 - z_dhk) * z_dhc * z_dhy + z_dhk * z_dhv;
+	for (z_dhm = 1; z_dhm <= 6; z_dhm = z_dhm + (1))
+	{
+		z_cub[2][z_dhm] = z_dhy * (z_dh[1][z_dhm] - z_dh[3][z_dhm]) - z_dhvp * (z_dh[2][z_dhm] - z_dh[4][z_dhm]);
+	}
+	z_s_exqua();
+	for (z_dhm = 1; z_dhm <= 6; z_dhm = z_dhm + (1))
+	{
+		z_dh[5][z_dhm] = z_cub[1][z_dhm];
+	}
+	for (z_dhm = 1; z_dhm <= 6; z_dhm = z_dhm + (1))
+	{
+		z_cub[2][z_dhm] = z_dhy * z_dh[3][z_dhm] - z_dhvp * z_dh[4][z_dhm];
+	}
+	z_s_exqua();
+	z_dhbase = z_cub[1][1] * z_dhi / z_dhc;
+	for (z_dhm = 1; z_dhm <= 6; z_dhm = z_dhm + (1))
+	{
+		z_sc[7][z_dhm] = 0;
+	}
+	if (fabs(z_dhbase) > 1E-25)
+	{
+		z_dhn = z_dhs1 / z_dhbase;
+		z_dhjc = z_dhj / z_dhc;
+		z_dhic = z_dhi / z_dhc;
+		z_dh[6][1] = z_dhn * z_dhic * z_dh[5][1];
+		z_dh[6][2] = z_dhn * z_dhjc * z_dhic * z_dh[5][2];
+		z_dh[6][3] = z_dhn * z_dhjc * z_dhjc * z_dhic * z_dh[5][3];
+		z_dh[6][4] = z_dhn * z_dhjc * z_dhjc * z_dhic * z_dh[5][4];
+		z_dh[6][5] = z_dhn * z_dhjc * z_dhjc * z_dhjc * z_dhic * z_dh[5][5];
+		z_dh[6][6] = z_dhn * z_dhjc * z_dhjc * z_dhjc * z_dhjc * z_dhic * z_dh[5][6];
+		z_dhw2 = -0.5 * z_dh[6][4];
+		z_dh[7][1] = z_dh[6][1];
+		z_dh[7][2] = z_dh[6][2];
+		z_dh[7][3] = z_dhw2;
+		z_dh[7][4] = z_dh[6][3] - z_dhw2;
+		z_dh[7][5] = z_dh[6][5];
+		z_dh[7][6] = z_dh[6][6];
+		z_dhq1 = z_dhq;
+		z_dhq2 = z_dhq1 * z_dhq1;
+		z_dhq3 = z_dhq2 * z_dhq1;
+		z_dhq4 = z_dhq3 * z_dhq1;
+		z_dha = z_dh[7][1];
+		z_sc[7][1] = z_dha;
+		z_sc[7][2] = 4 * z_dhq1 * z_dha + z_dh[7][2];
+		z_sc[7][3] = 2 * z_dhq2 * z_dha + z_dhq1 * z_dh[7][2] + z_dh[7][3] + z_dh[7][4];
+		z_sc[7][4] = 4 * z_dhq2 * z_dha + 2 * z_dhq1 * z_dh[7][2] - 2 * z_dh[7][3];
+		z_sc[7][5] = 4 * z_dhq3 * z_dha + 3 * z_dhq2 * z_dh[7][2] - 2 * z_dhq1 * z_dh[7][3];
+		z_sc[7][5] = z_sc[7][5] + 2 * z_dhq1 * z_dh[7][4] + z_dh[7][5];
+		z_sc[7][6] = z_dhq4 * z_dha + z_dhq3 * z_dh[7][2] - z_dhq2 * z_dh[7][3] + z_dhq2 * z_dh[7][4];
+		z_sc[7][6] = z_sc[7][6] + z_dhq1 * z_dh[7][5] + z_dh[7][6];
+	}
+	return (0);
+}
+
+static int
+z_s_secnd()
+{
+	z_scw1 = 0;
+	z_scw2 = 0;
+	z_scw3 = 0;
+	if (z_scst == 1)
+	{
+		z_scw1 = -z_tt[z_scb][8] * z_tt[z_scb][15];
+		z_scw2 = -z_tt[z_scb][8] * z_tt[z_scb][16];
+		z_scw3 = -(z_tt[z_scb][17] + z_tt[z_scb][18]) * z_tt[z_scb][8];
+	}
+	z_scv1 = 0;
+	z_scv2 = 0;
+	z_scv3 = 0;
+	if (z_scst == 1)
+	{
+		z_scv1 = -z_scqo * z_tt[z_scb][15];
+		z_scv2 = -z_scqo * z_tt[z_scb][16];
+		z_scv3 = -(z_tt[z_scb][17] + z_tt[z_scb][18]) * z_scqo;
+	}
+	z_scs1 = z_sc[3][1] + 3 * z_sca * z_sc[2][1];
+	z_scq1 = z_sc[1][1] + 3 * z_scab * z_sc[2][1];
+	z_sc[4][1] = z_scs1;
+	z_sc[5][1] = z_sca * z_sc[2][7] + z_scq1;
+	z_scm2 = 2 * (z_scab * z_sc[2][1] + (z_sc[2][2] + z_sc[2][3]) * z_sca) + z_scw1 + z_sc[3][2];
+	z_scn2 = 2 * (z_scq2 * z_sc[2][1] + (z_sc[2][2] + z_sc[2][3]) * z_scab) + z_scv1 + z_sc[1][2];
+	z_sc[6][1] = z_scm2;
+	z_scs2 = 2 * z_scab * z_sc[2][1] + z_sca * z_sc[2][3] + z_scm2;
+	z_scq2b = 2 * z_scq2 * z_sc[2][1] + z_scab * z_sc[2][3] + z_scn2;
+	z_sc[4][2] = z_scs2;
+	z_sc[5][2] = 2 * z_scab * z_sc[2][7] + z_sca * z_sc[2][8] + z_scq2b;
+	z_scm3 = 2 * (z_scab * z_sc[2][2] + z_sc[2][5] * z_sca) + z_scw2 + z_sc[3][3];
+	z_scn3 = 2 * (z_scq2 * z_sc[2][2] + z_sc[2][5] * z_scab) + z_scv2 + z_sc[1][3];
+	z_sc[6][2] = z_scm3;
+	z_scs3 = z_sccc * z_sc[2][1] + z_sca * z_sc[2][5] + z_scm3;
+	z_scq3 = z_scqc * z_sc[2][1] + z_scab * z_sc[2][5] + z_scn3;
+	z_sc[4][3] = z_scs3;
+	z_sc[5][3] = z_sca * z_sc[2][9] + z_sccc * z_sc[2][7] + z_scq3;
+	z_scm4 = 2 * (z_scm3 - z_sc[3][3]) + z_sc[3][4];
+	z_scn4 = 2 * (z_scn3 - z_sc[1][3]) + z_sc[1][4];
+	z_sc[6][3] = z_scm4;
+	z_scs4 = 2 * z_scab * z_sc[2][3] + z_scm4;
+	z_scq4 = 2 * z_scq2 * z_sc[2][3] + z_scn4;
+	z_sc[4][4] = z_scs4;
+	z_sc[5][4] = 2 * z_scab * z_sc[2][8] + z_scq4;
+	z_scm5 = z_scw3 + z_sc[3][5] + 2 * (z_scab * (z_sc[2][4] + z_sc[2][5]) + z_sc[2][6] * z_sca);
+	z_scn5 = z_scv3 + z_sc[1][5] + 2 * (z_scq2 * (z_sc[2][4] + z_sc[2][5]) + z_sc[2][6] * z_scab);
+	z_sc[6][4] = z_scm5;
+	z_scs5 = 2 * z_scab * z_sc[2][5] + z_sccc * z_sc[2][3] + z_scm5;
+	z_scq5 = 2 * z_scq2 * z_sc[2][5] + z_scqc * z_sc[2][3] + z_scn5;
+	z_sc[4][5] = z_scs5;
+	z_sc[5][5] = 2 * z_scab * z_sc[2][9] + z_sccc * z_sc[2][8] + z_scq5;
+	z_scm6 = 2 * (z_sccc * z_tt[z_scb][19] - z_scab * z_tt[z_scb][24]) + z_sc[3][6];
+	z_scn6 = 2 * (z_scqc * z_tt[z_scb][19] - z_scq2 * z_tt[z_scb][24]) + z_sc[1][6];
+	z_sc[6][5] = z_scm6;
+	z_scs6 = z_sccc * z_sc[2][5] + z_scm6;
+	z_scq6 = z_scqc * z_sc[2][5] + z_scn6;
+	z_sc[4][6] = z_scs6;
+	z_sc[5][6] = z_sccc * z_sc[2][9] + z_scq6;
+	return (0);
+}
+
+static int
+z_s_tablei()
+{
+	z_tig = (z_grun - 1) * (z_nsm + 2) + 1;
+	for (z_tii = 0; z_tii <= z_nsm + 1; z_tii = z_tii + (1))
+	{
+		z_tib = z_tig + z_tii;
+		for (z_tij = 1; z_tij <= 160; z_tij = z_tij + (1))
+		{
+			z_tt[z_tib][z_tij] = 0;
+		}
+		for (z_tij = 1; z_tij <= 30; z_tij = z_tij + (1))
+		{
+			z_yf[z_tib][z_tij] = 0;
+		}
+		for (z_tij = 1; z_tij <= 79; z_tij = z_tij + (1))
+		{
+			z_rv[z_tib][z_tij] = 0;
+		}
+	}
+	z_tivp = 0;
+	z_tivq = 0;
+	for (z_tii = 1; z_tii <= z_nsm; z_tii = z_tii + (1))
+	{
+		z_tib = z_tig + z_tii;
+		z_tipr = z_tib - 1;
+		z_tic = z_vfm[z_tii][1] * z_efl;
+		z_tinb = b7_ns[z_tii - 1];
+		z_tina = b7_ns[z_tii];
+		if (z_gdual == 1)
+		{
+			z_tinb = -z_tinb;
+			z_tina = -z_tina;
+		}
+		if (fabs(z_tina) < 1E-12) { z_tina = 1; }
+		z_tik = z_tinb / z_tina;
+		z_tin = z_tinb;
+		z_tid = 0;
+		if (z_tii > 1) { z_tid = th[z_tii - 1] / z_efl; }
+		if (z_tii == 1)
+		{
+			z_tigoe = 1 - z_stopp * z_iota;
+			if (fabs(z_tigoe) < 1E-12) { z_tigoe = 1; }
+			z_tt[z_tib][1] = 1;
+			z_tt[z_tib][2] = z_iota;
+			z_tt[z_tib][4] = z_stopp / z_tigoe / z_n0abs;
+			z_tt[z_tib][5] = 1 / z_tigoe / z_n0abs;
+			if (z_gdual == 1)
+			{
+				z_tisw = z_tt[z_tib][1];
+				z_tt[z_tib][1] = z_tt[z_tib][4];
+				z_tt[z_tib][4] = z_tisw;
+				z_tisw = z_tt[z_tib][2];
+				z_tt[z_tib][2] = z_tt[z_tib][5];
+				z_tt[z_tib][5] = z_tisw;
+			}
+		}
+		else
+		{
+			z_tt[z_tib][2] = z_tivp;
+			z_tt[z_tib][1] = z_tt[z_tipr][1] - z_tid * z_tt[z_tib][2];
+			z_tt[z_tib][5] = z_tivq;
+			z_tt[z_tib][4] = z_tt[z_tipr][4] - z_tid * z_tt[z_tib][5];
+		}
+		z_tt[z_tib][3] = z_tic * z_tt[z_tib][1] - z_tt[z_tib][2];
+		z_tt[z_tib][6] = 0;
+		if (fabs(z_tt[z_tib][3]) > 1E-30)
+		{
+			z_tt[z_tib][6] = (z_tic * z_tt[z_tib][4] - z_tt[z_tib][5]) / z_tt[z_tib][3];
+		}
+		z_tt[z_tib][7] = -z_tt[z_tib][2] * z_tt[z_tib][6] + z_tt[z_tib][5];
+		z_tt[z_tib][8] = (z_tik - 1) * z_tic / z_tin;
+		z_tt[z_tib][9] = z_tt[z_tib][2] * z_tt[z_tib][2];
+		z_tivp = (1 - z_tik) * z_tic * z_tt[z_tib][1] + z_tik * z_tt[z_tib][2];
+		z_tivq = (1 - z_tik) * z_tic * z_tt[z_tib][4] + z_tik * z_tt[z_tib][5];
+		z_rv[z_tib][20] = z_tivp;
+		z_rv[z_tib][21] = z_tivq;
+		z_ti2s = z_tivp;
+		z_ti9s = z_tivp * z_tivp;
+		z_tilag = z_tt[z_tib][5] * z_tt[z_tib][1] - z_tt[z_tib][2] * z_tt[z_tib][4];
+		z_tiap = 0;
+		z_tig2 = 0;
+		if (fabs(z_tilag) > 1E-30)
+		{
+			z_tig2 = 0.5 * (z_ti2s - z_tt[z_tib][3]) * (z_tik - 1) * z_tt[z_tib][1] / z_tilag;
+			z_tiap = z_tig2 * z_tt[z_tib][3] * z_tt[z_tib][3];
+		}
+		z_tiaf = z_ai[z_tib][1];
+		z_tirho = 0;
+		if (fabs(z_tt[z_tib][1]) > 1E-30) { z_tirho = z_tt[z_tib][4] / z_tt[z_tib][1]; }
+		z_tiiq = z_tic * z_tt[z_tib][4] - z_tt[z_tib][5];
+		z_tt[z_tib][10] = z_tiap + z_tiaf;
+		z_tt[z_tib][11] = z_tig2 * z_tt[z_tib][3] * z_tiiq + z_tirho * z_tiaf;
+		z_tt[z_tib][12] = 2 * (z_tig2 * z_tiiq * z_tiiq + z_tirho * z_tirho * z_tiaf);
+		z_tic13 = z_tig2 * z_tiiq * z_tiiq - 0.5 * z_tt[z_tib][8];
+		z_ticf = z_tirho * z_tirho * z_tiaf;
+		z_tt[z_tib][13] = z_tic13 + z_ticf;
+		z_ticoi = 0;
+		if (fabs(z_tt[z_tib][3]) > 1E-30)
+		{
+			z_ticoi = z_tic / z_tt[z_tib][3];
+		}
+		else
+		{
+			if (fabs(z_tt[z_tib][2]) < 1E-30)
+			{
+				if (fabs(z_tt[z_tib][1]) > 1E-30) { z_ticoi = 1 / z_tt[z_tib][1]; }
+			}
+		}
+		z_tiq3 = z_tiiq * z_tiiq * z_tiiq;
+		z_tiqc = 0;
+		if (fabs(z_tilag) > 1E-30)
+		{
+			z_tiz = z_ticoi * (z_tt[z_tib][1] * z_tt[z_tib][1] * z_tiq3 / z_tilag - z_tiiq / z_tin);
+			z_tiz = z_tiz - (1 + z_tik) * z_tt[z_tib][1] * z_tiq3 / z_tilag;
+			z_tiqc = 0.5 * (z_tik - 1) * z_tiz;
+		}
+		z_tt[z_tib][14] = z_tiqc + z_tirho * z_ticf;
+		z_rv[z_tib][1] = z_tirho;
+		z_rv[z_tib][2] = z_tiap;
+		z_rv[z_tib][3] = z_tiaf;
+		z_rv[z_tib][4] = z_tic13;
+		z_rv[z_tib][5] = z_ticf;
+		z_rv[z_tib][6] = z_ticoi;
+		z_rv[z_tib][7] = z_tiiq;
+		z_rv[z_tib][8] = z_tilag;
+		z_rv[z_tib][9] = z_tik;
+		z_rv[z_tib][10] = z_tin;
+		z_rv[z_tib][11] = z_tig2 * z_tt[z_tib][3] * z_tiiq;
+		z_rv[z_tib][12] = z_tig2 * z_tiiq * z_tiiq;
+		z_rv[z_tib][13] = z_tiqc;
+		z_rv[z_tib][14] = (z_tik - 1) * z_ticoi * z_tiiq / z_tin;
+		z_rv[z_tib][15] = z_tirho * z_ticf;
+		z_rv[z_tib][19] = z_tic;
+		z_rv[z_tib][18] = 0;
+		if (fabs(z_tt[z_tib][3]) < 1E-30)
+		{
+			if (fabs(z_tt[z_tib][2]) < 1E-30)
+			{
+				if (fabs(z_tilag) > 1E-30)
+				{
+					if (fabs(z_tt[z_tib][1]) > 1E-30)
+					{
+						z_rv[z_tib][18] = 1;
+						if (z_vfm[z_tii][6] == 1) { z_flatbad = 1; }
+					}
+				}
+			}
+		}
+		z_tt[z_tib][34] = ((z_tik * z_tik + 1) * z_tt[z_tib][3] * z_tt[z_tib][3] + z_ti9s - 3 * z_tt[z_tib][9]) / 8;
+		z_tt[z_tib][35] = (z_tik - 1) * z_tt[z_tib][2] * z_tt[z_tib][3];
+		z_tt[z_tib][36] = 0.5 * (-z_tik * z_tt[z_tib][3] * z_tt[z_tib][3] - z_tt[z_tib][9] + 8 * z_tt[z_tib][34] + 3 * z_tt[z_tib][35]);
+		z_tt[z_tib][37] = 2 * z_tt[z_tib][9] + 8 * z_tt[z_tib][34] + 5 * z_tt[z_tib][35] - z_tt[z_tib][36];
+		z_tt[z_tib][43] = (z_ti2s - 3 * z_tt[z_tib][2]) * z_tt[z_tib][7] * z_tiap;
+		z_tt[z_tib][48] = 0.5 * z_tt[z_tib][7] * z_tt[z_tib][7] * z_tiap;
+		z_tt[z_tib][49] = 0.25 * (z_ti9s - z_tt[z_tib][9]) * z_ti2s * z_tt[z_tib][7];
+		z_tt[z_tib][58] = 0.5 * z_tt[z_tib][8] * z_tt[z_tib][8];
+		z_tt[z_tib][64] = z_tt[z_tib][7] * z_tt[z_tib][7] * z_tt[z_tib][8] / 8;
+		z_tt[z_tib][81] = z_tt[z_tib][2] * z_tt[z_tib][5];
+		z_tt[z_tib][82] = z_tt[z_tib][5] * z_tt[z_tib][5];
+		z_tt[z_tib][121] = (0.25 * (2 * z_ti2s - 5 * z_tt[z_tib][2]) * z_tt[z_tib][7] * z_tiap + 10 * z_tt[z_tib][34] * z_tt[z_tib][34]) * z_tiap;
+		z_tt[z_tib][122] = 0.5 * ((z_ti2s - z_tt[z_tib][3]) * z_tic * z_tt[z_tib][1] * z_tt[z_tib][2] * z_tt[z_tib][7] * z_tiap + 10 * z_tt[z_tib][34] * z_tt[z_tib][43]);
+		z_tt[z_tib][123] = ((2 * z_tt[z_tib][34] + 0.5 * z_tt[z_tib][36] - 0.75 * z_tt[z_tib][35]) * z_tt[z_tib][35] - z_tt[z_tib][34] * z_tt[z_tib][37]) * 0.75 * z_tt[z_tib][8];
+		z_tt[z_tib][124] = (5 * z_tt[z_tib][9] - 10 * z_tt[z_tib][34] + 2 * z_tt[z_tib][36]) * 0.25 * z_tt[z_tib][48];
+		z_tt[z_tib][125] = -0.5 * (z_tt[z_tib][2] + z_ti2s) * z_tt[z_tib][7] * z_tt[z_tib][8] * z_tt[z_tib][36];
+		z_tt[z_tib][126] = 2 * (z_tt[z_tib][9] + z_tt[z_tib][34] - 5 * z_tt[z_tib][35] / 4) * z_tt[z_tib][64];
+		z_tt[z_tib][127] = -z_tt[z_tib][7] * z_tt[z_tib][7] * z_tt[z_tib][43];
+		z_tt[z_tib][128] = -2 * (4 * z_tt[z_tib][34] + 5 * z_tt[z_tib][35] - 2 * z_tt[z_tib][9]) * z_tt[z_tib][64];
+		z_tt[z_tib][129] = -0.75 * z_tt[z_tib][7] * z_tt[z_tib][7] * z_tt[z_tib][58];
+		z_tt[z_tib][130] = -0.5 * z_tt[z_tib][7] * z_tt[z_tib][7] * z_tt[z_tib][64];
+		for (z_tim = 1; z_tim <= 10; z_tim = z_tim + (1))
+		{
+			z_rv[z_tib][55 + z_tim] = z_tt[z_tib][120 + z_tim];
+			z_rv[z_tib][65 + z_tim] = 0;
+		}
+		if (z_vfm[z_tii][6] == 1)
+		{
+			if (fabs(z_tt[z_tib][3]) > 1E-30)
+			{
+				z_exyy = z_tt[z_tib][1];
+				z_exvv = z_tt[z_tib][2];
+				z_excc = z_tic;
+				z_s_exbas();
+				z_tivpr = (1 - z_tik) * z_tic * z_tt[z_tib][1] + z_tik * z_tt[z_tib][2];
+				for (z_tim = 1; z_tim <= 10; z_tim = z_tim + (1))
+				{
+					z_tidl = z_tt[z_tib][1] * (z_pc[z_tii][z_tim] - z_pc[z_tii][10 + z_tim]);
+					if (z_tim < 7)
+					{
+						z_tidl = z_tidl - z_tivpr * (z_pc[z_tii][20 + z_tim] - z_pc[z_tii][26 + z_tim]);
+					}
+					z_cub[2][z_tim] = z_tidl / z_tik;
+				}
+				z_s_excub();
+				for (z_tim = 1; z_tim <= 10; z_tim = z_tim + (1))
+				{
+					z_tz[1][z_tim] = z_cub[1][z_tim];
+				}
+				if (z_dbg == 1)
+				{
+					if (z_grun == 2)
+					{
+						strcat(b7_ln, " "); b7_out();
+						strcat(b7_ln, "Figuring cubics, surface "); sprintf(b7_tmp, "%3.0f", 1.0*(z_tii)); strcat(b7_ln, b7_tmp); b7_out();
+						strcat(b7_ln, "  lamFig"); sprintf(b7_tmp, "%15.6e", 1.0*(z_pc[z_tii][1])); strcat(b7_ln, b7_tmp); sprintf(b7_tmp, "%15.6e", 1.0*(z_pc[z_tii][2])); strcat(b7_ln, b7_tmp); sprintf(b7_tmp, "%15.6e", 1.0*(z_pc[z_tii][3])); strcat(b7_ln, b7_tmp); sprintf(b7_tmp, "%15.6e", 1.0*(z_pc[z_tii][4])); strcat(b7_ln, b7_tmp); sprintf(b7_tmp, "%15.6e", 1.0*(z_pc[z_tii][5])); strcat(b7_ln, b7_tmp); b7_out();
+						strcat(b7_ln, "        "); sprintf(b7_tmp, "%15.6e", 1.0*(z_pc[z_tii][6])); strcat(b7_ln, b7_tmp); sprintf(b7_tmp, "%15.6e", 1.0*(z_pc[z_tii][7])); strcat(b7_ln, b7_tmp); sprintf(b7_tmp, "%15.6e", 1.0*(z_pc[z_tii][8])); strcat(b7_ln, b7_tmp); sprintf(b7_tmp, "%15.6e", 1.0*(z_pc[z_tii][9])); strcat(b7_ln, b7_tmp); sprintf(b7_tmp, "%15.6e", 1.0*(z_pc[z_tii][10])); strcat(b7_ln, b7_tmp); b7_out();
+						strcat(b7_ln, "  lamSph"); sprintf(b7_tmp, "%15.6e", 1.0*(z_pc[z_tii][11])); strcat(b7_ln, b7_tmp); sprintf(b7_tmp, "%15.6e", 1.0*(z_pc[z_tii][12])); strcat(b7_ln, b7_tmp); sprintf(b7_tmp, "%15.6e", 1.0*(z_pc[z_tii][13])); strcat(b7_ln, b7_tmp); sprintf(b7_tmp, "%15.6e", 1.0*(z_pc[z_tii][14])); strcat(b7_ln, b7_tmp); sprintf(b7_tmp, "%15.6e", 1.0*(z_pc[z_tii][15])); strcat(b7_ln, b7_tmp); b7_out();
+						strcat(b7_ln, "        "); sprintf(b7_tmp, "%15.6e", 1.0*(z_pc[z_tii][16])); strcat(b7_ln, b7_tmp); sprintf(b7_tmp, "%15.6e", 1.0*(z_pc[z_tii][17])); strcat(b7_ln, b7_tmp); sprintf(b7_tmp, "%15.6e", 1.0*(z_pc[z_tii][18])); strcat(b7_ln, b7_tmp); sprintf(b7_tmp, "%15.6e", 1.0*(z_pc[z_tii][19])); strcat(b7_ln, b7_tmp); sprintf(b7_tmp, "%15.6e", 1.0*(z_pc[z_tii][20])); strcat(b7_ln, b7_tmp); b7_out();
+						strcat(b7_ln, "  nupFig"); sprintf(b7_tmp, "%15.6e", 1.0*(z_pc[z_tii][21])); strcat(b7_ln, b7_tmp); sprintf(b7_tmp, "%15.6e", 1.0*(z_pc[z_tii][22])); strcat(b7_ln, b7_tmp); sprintf(b7_tmp, "%15.6e", 1.0*(z_pc[z_tii][23])); strcat(b7_ln, b7_tmp); sprintf(b7_tmp, "%15.6e", 1.0*(z_pc[z_tii][24])); strcat(b7_ln, b7_tmp); sprintf(b7_tmp, "%15.6e", 1.0*(z_pc[z_tii][25])); strcat(b7_ln, b7_tmp); sprintf(b7_tmp, "%15.6e", 1.0*(z_pc[z_tii][26])); strcat(b7_ln, b7_tmp); b7_out();
+						strcat(b7_ln, "  nupSph"); sprintf(b7_tmp, "%15.6e", 1.0*(z_pc[z_tii][27])); strcat(b7_ln, b7_tmp); sprintf(b7_tmp, "%15.6e", 1.0*(z_pc[z_tii][28])); strcat(b7_ln, b7_tmp); sprintf(b7_tmp, "%15.6e", 1.0*(z_pc[z_tii][29])); strcat(b7_ln, b7_tmp); sprintf(b7_tmp, "%15.6e", 1.0*(z_pc[z_tii][30])); strcat(b7_ln, b7_tmp); sprintf(b7_tmp, "%15.6e", 1.0*(z_pc[z_tii][31])); strcat(b7_ln, b7_tmp); sprintf(b7_tmp, "%15.6e", 1.0*(z_pc[z_tii][32])); strcat(b7_ln, b7_tmp); b7_out();
+						strcat(b7_ln, "  dDexp "); sprintf(b7_tmp, "%15.6e", 1.0*(z_tz[1][1])); strcat(b7_ln, b7_tmp); sprintf(b7_tmp, "%15.6e", 1.0*(z_tz[1][2])); strcat(b7_ln, b7_tmp); sprintf(b7_tmp, "%15.6e", 1.0*(z_tz[1][3])); strcat(b7_ln, b7_tmp); sprintf(b7_tmp, "%15.6e", 1.0*(z_tz[1][4])); strcat(b7_ln, b7_tmp); sprintf(b7_tmp, "%15.6e", 1.0*(z_tz[1][5])); strcat(b7_ln, b7_tmp); b7_out();
+						strcat(b7_ln, "        "); sprintf(b7_tmp, "%15.6e", 1.0*(z_tz[1][6])); strcat(b7_ln, b7_tmp); sprintf(b7_tmp, "%15.6e", 1.0*(z_tz[1][7])); strcat(b7_ln, b7_tmp); sprintf(b7_tmp, "%15.6e", 1.0*(z_tz[1][8])); strcat(b7_ln, b7_tmp); sprintf(b7_tmp, "%15.6e", 1.0*(z_tz[1][9])); strcat(b7_ln, b7_tmp); sprintf(b7_tmp, "%15.6e", 1.0*(z_tz[1][10])); strcat(b7_ln, b7_tmp); b7_out();
+						strcat(b7_ln, "  k     "); sprintf(b7_tmp, "%15.6e", 1.0*(z_tik)); strcat(b7_ln, b7_tmp); strcat(b7_ln, "  c0 "); sprintf(b7_tmp, "%15.6e", 1.0*(z_tic)); strcat(b7_ln, b7_tmp); strcat(b7_ln, "  y "); sprintf(b7_tmp, "%15.6e", 1.0*(z_tt[z_tib][1])); strcat(b7_ln, b7_tmp); strcat(b7_ln, "  v "); sprintf(b7_tmp, "%15.6e", 1.0*(z_tt[z_tib][2])); strcat(b7_ln, b7_tmp); b7_out();
+						strcat(b7_ln, "  c1    "); sprintf(b7_tmp, "%15.6e", 1.0*(z_pcf[z_tii][1])); strcat(b7_ln, b7_tmp); strcat(b7_ln, "  c2 "); sprintf(b7_tmp, "%15.6e", 1.0*(z_pcf[z_tii][2])); strcat(b7_ln, b7_tmp); strcat(b7_ln, "  c3 "); sprintf(b7_tmp, "%15.6e", 1.0*(z_pcf[z_tii][3])); strcat(b7_ln, b7_tmp); b7_out();
+					}
+				}
+				for (z_tim = 1; z_tim <= 10; z_tim = z_tim + (1))
+				{
+					z_tidl = z_tt[z_tib][1] * z_pc[z_tii][32 + z_tim];
+					z_tidl = z_tidl + z_tt[z_tib][1] * z_pc[z_tii][42 + z_tim] - z_tivpr * z_pc[z_tii][52 + z_tim];
+					z_tidl = z_tidl + z_tt[z_tib][1] * z_pc[z_tii][62 + z_tim] - z_tivpr * z_pc[z_tii][72 + z_tim];
+					z_cub[2][z_tim] = 16 * z_tidl / z_tik;
+				}
+				z_s_excub();
+				z_tinrm = z_tin * (1 - z_tik) / 16;
+				z_tijc = z_tilag / z_tt[z_tib][3];
+				for (z_tim = 1; z_tim <= 10; z_tim = z_tim + (1))
+				{
+					z_tiw = z_tinrm;
+					z_tipn = z_mon[6][z_tim];
+					if (z_tipn > 0)
+					{
+						for (z_tip = 1; z_tip <= z_tipn; z_tip = z_tip + (1))
+						{
+							z_tiw = z_tiw * z_tijc;
+						}
+					}
+					z_tz[2][z_tim] = z_tiw * z_tt[z_tib][3] * z_tz[1][z_tim];
+					z_tz[3][z_tim] = z_tiw * z_tt[z_tib][1] * z_cub[1][z_tim];
+				}
+				z_tiq4 = z_tz[2][4] / 8;
+				z_tz[2][3] = z_tz[2][3] - z_tiq4;
+				z_tz[2][4] = z_tiq4;
+				z_tiq4 = z_tz[3][4] / 8;
+				z_tz[3][3] = z_tz[3][3] - z_tiq4;
+				z_tz[3][4] = z_tiq4;
+				for (z_tim = 1; z_tim <= 10; z_tim = z_tim + (1))
+				{
+					z_rv[z_tib][55 + z_tim] = z_rv[z_tib][55 + z_tim] + z_tz[2][z_tim];
+					z_rv[z_tib][65 + z_tim] = z_rv[z_tib][65 + z_tim] + z_tz[3][z_tim];
+					z_tt[z_tib][120 + z_tim] = z_tt[z_tib][120 + z_tim] + z_tz[2][z_tim] + z_tz[3][z_tim];
+				}
+			}
+		}
+	}
+	for (z_tii = 1; z_tii <= z_nsm; z_tii = z_tii + (1))
+	{
+		z_tib = z_tig + z_tii;
+		z_tia = 0;
+		z_tiab = 0;
+		z_tibb = 0;
+		z_ticc = 0;
+		z_ticb = 0;
+		z_ticg = 0;
+		if (z_tii > 1)
+		{
+			for (z_tim = 1; z_tim <= z_tii - 1; z_tim = z_tim + (1))
+			{
+				z_tia = z_tia + z_tt[z_tig + z_tim][10];
+				z_tiab = z_tiab + z_tt[z_tig + z_tim][11];
+				z_tibb = z_tibb + z_tt[z_tig + z_tim][12];
+				z_ticc = z_ticc + z_tt[z_tig + z_tim][13];
+				z_ticb = z_ticb + z_tt[z_tig + z_tim][14];
+				z_ticg = z_ticg + z_rv[z_tig + z_tim][15];
+			}
+		}
+		z_rv[z_tib][16] = z_ticg;
+		z_tt[z_tib][15] = z_tia;
+		z_tt[z_tib][16] = z_tiab;
+		z_tt[z_tib][17] = z_tibb;
+		z_tt[z_tib][18] = z_ticc;
+		z_tt[z_tib][19] = z_ticb;
+		z_tt[z_tib][20] = 0.5 * (z_tt[z_tig + 1][9] - z_tt[z_tib][9]) + z_tt[z_tib][16];
+	}
+	z_ti81f = z_tt[z_tig + 1][2] * z_tt[z_tig + 1][5];
+	z_ti82f = z_tt[z_tig + 1][5] * z_tt[z_tig + 1][5];
+	for (z_tii = 1; z_tii <= z_nsm; z_tii = z_tii + (1))
+	{
+		z_tib = z_tig + z_tii;
+		z_tipr = z_tib - 1;
+		z_tt[z_tib][21] = 0.5 * (z_ti81f - z_tt[z_tib][2] * z_tt[z_tib][5]) + z_tt[z_tib][18];
+		z_tt[z_tib][22] = 2 * (z_tt[z_tib][21] - z_tt[z_tib][18]) + z_tt[z_tib][17];
+		z_tt[z_tib][23] = 0.5 * (z_ti82f - z_tt[z_tib][5] * z_tt[z_tib][5]) + z_tt[z_tib][19];
+		z_ti23f = z_rv[z_tib][16];
+		z_ti23p = 0;
+		z_ti24p = 0;
+		z_tirhp = 0;
+		if (z_tii > 1)
+		{
+			z_ti23p = z_rv[z_tipr][16];
+			z_ti24p = z_rv[z_tipr][17];
+			z_tirhp = z_rv[z_tipr][1];
+		}
+		z_rv[z_tib][17] = (z_ti23f - z_ti23p) * z_tirhp + z_ti24p;
+		z_tiinc = (z_tt[z_tib][23] - z_ti23f) - (z_tt[z_tipr][23] - z_ti23p);
+		z_ticar = z_tiinc * z_tt[z_tipr][6];
+		z_tt[z_tib][24] = z_ticar + (z_tt[z_tipr][24] - z_ti24p) + z_rv[z_tib][17];
+		z_tt[z_tib][25] = z_tt[z_tib][6] * z_tt[z_tib][15] - z_tt[z_tib][20];
+		z_tt[z_tib][26] = z_tt[z_tib][6] * z_tt[z_tib][16] - z_tt[z_tib][21];
+		z_tt[z_tib][27] = 2 * z_tt[z_tib][6] * z_tt[z_tib][16] - z_tt[z_tib][22];
+		z_tt[z_tib][28] = z_tt[z_tib][6] * z_tt[z_tib][17] - 2 * z_tt[z_tib][23];
+		z_tt[z_tib][29] = z_tt[z_tib][6] * z_tt[z_tib][18] - z_tt[z_tib][23];
+		z_tt[z_tib][30] = z_tt[z_tib][6] * z_tt[z_tib][19] - z_tt[z_tib][24];
+		z_tt[z_tib][31] = -z_tt[z_tib][6] * z_tt[z_tib][25] + z_tt[z_tib][26];
+		z_tt[z_tib][32] = -z_tt[z_tib][6] * z_tt[z_tib][27] + z_tt[z_tib][28];
+		z_tt[z_tib][33] = -z_tt[z_tib][6] * z_tt[z_tib][29] + z_tt[z_tib][30];
+		z_tiy = z_rv[z_tib][1];
+		z_yf[z_tib][1] = z_tiy * z_tt[z_tib][15] - z_tt[z_tib][20];
+		z_yf[z_tib][2] = z_tiy * z_tt[z_tib][16] - z_tt[z_tib][21];
+		z_yf[z_tib][3] = 2 * z_tiy * z_tt[z_tib][16] - z_tt[z_tib][22];
+		z_yf[z_tib][4] = z_tiy * z_tt[z_tib][17] - 2 * z_tt[z_tib][23];
+		z_yf[z_tib][5] = z_tiy * z_tt[z_tib][18] - z_tt[z_tib][23];
+		z_yf[z_tib][6] = z_tiy * z_tt[z_tib][19] - z_tt[z_tib][24];
+		z_yf[z_tib][7] = -z_tiy * z_yf[z_tib][1] + z_yf[z_tib][2];
+		z_yf[z_tib][8] = -z_tiy * z_yf[z_tib][3] + z_yf[z_tib][4];
+		z_yf[z_tib][9] = -z_tiy * z_yf[z_tib][5] + z_yf[z_tib][6];
+	}
+	return (0);
+}
+
+static int
+z_s_tablei2()
+{
+	z_tjg = (z_grun - 1) * (z_nsm + 2) + 1;
+	for (z_tji = 1; z_tji <= z_nsm; z_tji = z_tji + (1))
+	{
+		z_tjb = z_tjg + z_tji;
+		z_scb = z_tjb;
+		z_tjk = z_rv[z_tjb][9];
+		z_tjn = z_rv[z_tjb][10];
+		z_tjc = z_rv[z_tjb][19];
+		z_tjap = z_rv[z_tjb][2];
+		z_tjaf = z_rv[z_tjb][3];
+		z_tjrr = z_rv[z_tjb][1];
+		z_tjs1 = 3 * z_tjap * z_tt[z_tjb][34];
+		z_tjs2 = 4 * z_tt[z_tjb][6] * z_tjs1 + z_tt[z_tjb][43];
+		z_tjs3 = 0.5 * z_tt[z_tjb][6] * (z_tt[z_tjb][43] + z_tjs2) + z_tt[z_tjb][48] + z_tt[z_tjb][49];
+		z_tjs4 = 2 * (z_tjs3 - 2 * z_tt[z_tjb][48] - z_tt[z_tjb][49]);
+		z_tjs5 = (-z_tt[z_tjb][6] * z_tjs2 + 2 * z_tjs3 + z_tjs4 - 2 * z_tt[z_tjb][48]) * z_tt[z_tjb][6] + z_tt[z_tjb][58];
+		z_tjs6 = 0.25 * (2 * z_tt[z_tjb][49] - 2 * z_tjs3 - z_tjs4) * z_tt[z_tjb][6] + z_tt[z_tjb][58] + z_tjs5;
+		z_tjs6 = 0.5 * z_tjs6 * z_tt[z_tjb][6] + z_tt[z_tjb][64];
+		z_rv[z_tjb][22] = z_tjs1;
+		z_rv[z_tjb][23] = z_tjs2;
+		z_rv[z_tjb][24] = z_tjs3;
+		z_rv[z_tjb][25] = z_tjs4;
+		z_rv[z_tjb][26] = z_tjs5;
+		z_rv[z_tjb][27] = z_tjs6;
+		for (z_tjm = 1; z_tjm <= 6; z_tjm = z_tjm + (1))
+		{
+			z_rv[z_tjb][27 + z_tjm] = z_ai[z_tjb][1 + z_tjm];
+		}
+		z_tt[z_tjb][38] = z_tjs1 + z_ai[z_tjb][2];
+		z_tt[z_tjb][44] = z_tjs2 + z_ai[z_tjb][3];
+		z_tt[z_tjb][50] = z_tjs3 + z_ai[z_tjb][4];
+		z_tt[z_tjb][54] = z_tjs4 + z_ai[z_tjb][5];
+		z_tt[z_tjb][59] = z_tjs5 + z_ai[z_tjb][6];
+		z_tt[z_tjb][65] = z_tjs6 + z_ai[z_tjb][7];
+		z_tjci = z_rv[z_tjb][6];
+		z_tjiq = z_rv[z_tjb][7];
+		z_tjii = z_tt[z_tjb][3];
+		z_tjcy = z_tjci * z_tt[z_tjb][1];
+		z_tja3 = 0;
+		if (fabs(z_rv[z_tjb][8]) > 1E-30)
+		{
+			z_tja3 = 0.5 * (z_tjcy - (1 + z_tjk)) * (z_tjk - 1) * z_tt[z_tjb][1] / z_rv[z_tjb][8];
+		}
+		z_tjom = 0;
+		if (fabs(z_tt[z_tjb][1]) > 1E-30)
+		{
+			z_tjom = (z_tjk - 1) * z_tjcy / (z_tt[z_tjb][1] * z_tjn);
+		}
+		z_tjpo = (3 - z_tjk - 2 * z_tjcy) * z_tt[z_tjb][7];
+		z_tj34 = ((z_tjk * z_tjk - 1) - z_tjcy * z_tjcy + z_tjcy * (3 - z_tjk)) / 4;
+		z_tj48 = 0.5 * z_tt[z_tjb][7] * z_tt[z_tjb][7] * z_tja3;
+		z_tj49 = 0.25 * (1 - z_tjk) * (2 * z_tjcy - (1 + z_tjk)) * (z_tjcy - z_tjk) * z_tt[z_tjb][7];
+		z_tj58 = 0.5 * z_tjom * z_tjom;
+		z_tj64 = z_tt[z_tjb][7] * z_tt[z_tjb][7] * z_tjom / 8;
+		z_tjr2 = z_tja3 * (12 * z_tj34 * z_tjiq + z_tjpo);
+		z_tjr3 = 0.5 * z_tjiq * (z_tjpo * z_tja3 + z_tjr2) + z_tj48 + z_tj49;
+		z_tjr4 = 2 * (z_tjr3 - 2 * z_tj48 - z_tj49);
+		z_tjbr = 12 * z_tja3 * z_tj34 * z_tjiq * z_tjiq + 3 * z_tjpo * z_tja3 * z_tjiq - 2 * z_tj48 + 2 * z_tj49;
+		z_tjr5 = z_tjbr * z_tjiq + z_tj58;
+		z_tjwr = 0.25 * z_tjiq * (2 * z_tj49 - 2 * z_tjr3 - z_tjr4) + z_tj58 + z_tjr5;
+		z_tjr6 = 0.5 * z_tjwr * z_tjiq + z_tj64;
+		z_tji2 = z_tjii * z_tjii;
+		z_sc[1][1] = 3 * z_tja3 * z_tj34 * z_tjiq * z_tji2 * z_tji2;
+		z_sc[1][2] = z_tjr2 * z_tjiq * z_tjii * z_tji2;
+		z_sc[1][3] = z_tjr3 * z_tjiq * z_tji2;
+		z_sc[1][4] = z_tjr4 * z_tjiq * z_tji2;
+		z_sc[1][5] = z_tjr5 * z_tjiq * z_tjii;
+		z_sc[1][6] = z_tjr6 * z_tjiq;
+		for (z_tjm = 1; z_tjm <= 9; z_tjm = z_tjm + (1))
+		{
+			z_sc[2][z_tjm] = z_tt[z_tjb][24 + z_tjm];
+		}
+		z_sc[3][1] = z_tjs1;
+		z_sc[3][2] = z_tjs2;
+		z_sc[3][3] = z_tjs3;
+		z_sc[3][4] = z_tjs4;
+		z_sc[3][5] = z_tjs5;
+		z_sc[3][6] = z_tjs6;
+		z_sca = z_tjap;
+		z_scab = z_rv[z_tjb][11];
+		z_sccc = z_rv[z_tjb][4];
+		z_scq2 = z_rv[z_tjb][12];
+		z_scqc = z_rv[z_tjb][13];
+		z_scqo = z_rv[z_tjb][14];
+		z_scst = 1;
+		z_s_secnd();
+		for (z_tjm = 1; z_tjm <= 6; z_tjm = z_tjm + (1))
+		{
+			z_sc[8][z_tjm] = z_sc[4][z_tjm];
+			z_sc[9][z_tjm] = z_sc[5][z_tjm];
+			z_sc[10][z_tjm] = z_sc[6][z_tjm];
+		}
+		z_tjf0 = z_tjrr * z_tt[z_tjb][15] - z_tt[z_tjb][20];
+		z_tjf1 = z_tjrr * z_tt[z_tjb][16] - z_tt[z_tjb][21];
+		z_tjf2 = 2 * z_tjrr * z_tt[z_tjb][16] - z_tt[z_tjb][22];
+		z_tjf3 = z_tjrr * z_tt[z_tjb][17] - 2 * z_tt[z_tjb][23];
+		z_tjf4 = z_tjrr * z_tt[z_tjb][18] - z_tt[z_tjb][23];
+		z_tjf5 = z_tjrr * z_tt[z_tjb][19] - z_tt[z_tjb][24];
+		z_sc[2][1] = z_tjf0;
+		z_sc[2][2] = z_tjf1;
+		z_sc[2][3] = z_tjf2;
+		z_sc[2][4] = z_tjf3;
+		z_sc[2][5] = z_tjf4;
+		z_sc[2][6] = z_tjf5;
+		z_sc[2][7] = -z_tjrr * z_tjf0 + z_tjf1;
+		z_sc[2][8] = -z_tjrr * z_tjf2 + z_tjf3;
+		z_sc[2][9] = -z_tjrr * z_tjf4 + z_tjf5;
+		for (z_tjm = 1; z_tjm <= 6; z_tjm = z_tjm + (1))
+		{
+			z_sc[3][z_tjm] = z_ai[z_tjb][1 + z_tjm];
+			z_sc[1][z_tjm] = z_tjrr * z_ai[z_tjb][1 + z_tjm];
+		}
+		z_sca = z_tjaf;
+		z_scab = z_tjrr * z_tjaf;
+		z_sccc = z_tjrr * z_tjrr * z_tjaf;
+		z_scq2 = z_tjrr * z_tjrr * z_tjaf;
+		z_scqc = z_tjrr * z_tjrr * z_tjrr * z_tjaf;
+		z_scqo = z_tjrr * z_tt[z_tjb][8];
+		z_scst = 0;
+		z_s_secnd();
+		if (z_vfm[z_tji][6] == 1)
+		{
+			z_dhk = z_tjk;
+			z_dhy = z_tt[z_tjb][1];
+			z_dhv = z_tt[z_tjb][2];
+			z_dhyq = z_tt[z_tjb][4];
+			z_dhvq = z_tt[z_tjb][5];
+			z_dhs1 = z_tjs1;
+			z_dhc1 = z_pcf[z_tji][1];
+			z_dhc2 = z_pcf[z_tji][2];
+			z_dhc3 = z_pcf[z_tji][3];
+			if (fabs(z_tjc) > 1E-12)
+			{
+				z_dhc = z_tjc;
+				z_s_dhalf();
+				for (z_tjm = 1; z_tjm <= 6; z_tjm = z_tjm + (1))
+				{
+					z_sc[3][z_tjm] = z_sc[7][z_tjm];
+				}
+			}
+			else
+			{
+				z_dhc = 1E-6;
+				z_s_dhalf();
+				for (z_tjm = 1; z_tjm <= 6; z_tjm = z_tjm + (1))
+				{
+					z_sc[3][z_tjm] = z_sc[7][z_tjm];
+				}
+				z_dhc = -1E-6;
+				z_s_dhalf();
+				for (z_tjm = 1; z_tjm <= 6; z_tjm = z_tjm + (1))
+				{
+					z_sc[3][z_tjm] = 0.5 * (z_sc[3][z_tjm] + z_sc[7][z_tjm]);
+				}
+			}
+			z_tjld = z_tt[z_tjb][6] - z_tjrr;
+			for (z_tjm = 1; z_tjm <= 6; z_tjm = z_tjm + (1))
+			{
+				z_sc[5][z_tjm] = z_sc[5][z_tjm] + z_tjld * z_sc[3][z_tjm];
+				z_rv[z_tjb][33 + z_tjm] = z_sc[3][z_tjm];
+			}
+		}
+		for (z_tjm = 1; z_tjm <= 5; z_tjm = z_tjm + (1))
+		{
+			z_rv[z_tjb][45 + z_tjm] = z_sc[10][z_tjm];
+			z_rv[z_tjb][50 + z_tjm] = z_sc[6][z_tjm];
+		}
+		for (z_tjm = 1; z_tjm <= 6; z_tjm = z_tjm + (1))
+		{
+			z_rv[z_tjb][39 + z_tjm] = z_tjrr * z_sc[4][z_tjm];
+		}
+		z_tt[z_tjb][45] = z_sc[10][1] + z_sc[6][1];
+		z_tt[z_tjb][51] = z_sc[10][2] + z_sc[6][2];
+		z_tt[z_tjb][55] = z_sc[10][3] + z_sc[6][3];
+		z_tt[z_tjb][61] = z_sc[10][4] + z_sc[6][4];
+		z_tt[z_tjb][66] = z_sc[10][5] + z_sc[6][5];
+		z_tt[z_tjb][39] = 2 * z_tt[z_tjb][10] * z_tt[z_tjb][25];
+		z_tt[z_tjb][40] = z_tt[z_tjb][38] + z_tt[z_tjb][39];
+		z_tt[z_tjb][41] = z_sc[8][1] + z_sc[4][1];
+		z_tt[z_tjb][42] = z_sc[9][1] + z_sc[5][1];
+		z_tt[z_tjb][46] = z_sc[8][2] + z_sc[4][2];
+		z_tt[z_tjb][47] = z_sc[9][2] + z_sc[5][2];
+		z_tt[z_tjb][52] = z_sc[8][3] + z_sc[4][3];
+		z_tt[z_tjb][53] = z_sc[9][3] + z_sc[5][3];
+		z_tt[z_tjb][56] = z_sc[8][4] + z_sc[4][4];
+		z_tt[z_tjb][57] = z_sc[9][4] + z_sc[5][4];
+		z_tt[z_tjb][62] = z_sc[8][5] + z_sc[4][5];
+		z_tt[z_tjb][63] = z_sc[9][5] + z_sc[5][5];
+		z_tt[z_tjb][67] = z_sc[8][6] + z_sc[4][6];
+		z_tt[z_tjb][68] = z_sc[9][6] + z_sc[5][6];
+	}
+	for (z_tji = 1; z_tji <= z_nsm; z_tji = z_tji + (1))
+	{
+		z_tjb = z_tjg + z_tji;
+		if (z_tji > 1)
+		{
+			for (z_tjm = 1; z_tjm <= z_tji - 1; z_tjm = z_tjm + (1))
+			{
+				z_tjp = z_tjg + z_tjm;
+				z_tt[z_tjb][69] = z_tt[z_tjb][69] + z_tt[z_tjp][41];
+				z_tt[z_tjb][70] = z_tt[z_tjb][70] + z_tt[z_tjp][42];
+				z_tt[z_tjb][71] = z_tt[z_tjb][71] + z_tt[z_tjp][46];
+				z_tt[z_tjb][72] = z_tt[z_tjb][72] + z_tt[z_tjp][47];
+				z_tt[z_tjb][73] = z_tt[z_tjb][73] + z_tt[z_tjp][52];
+				z_tt[z_tjb][74] = z_tt[z_tjb][74] + z_tt[z_tjp][53];
+				z_tt[z_tjb][75] = z_tt[z_tjb][75] + z_tt[z_tjp][56];
+				z_tt[z_tjb][76] = z_tt[z_tjb][76] + z_tt[z_tjp][57];
+				z_tt[z_tjb][77] = z_tt[z_tjb][77] + z_tt[z_tjp][62];
+				z_tt[z_tjb][78] = z_tt[z_tjb][78] + z_tt[z_tjp][63];
+				z_tt[z_tjb][79] = z_tt[z_tjb][79] + z_tt[z_tjp][67];
+				z_tt[z_tjb][80] = z_tt[z_tjb][80] + z_tt[z_tjp][68];
+			}
+		}
+	}
+	for (z_tji = 1; z_tji <= z_nsm; z_tji = z_tji + (1))
+	{
+		z_tjb = z_tjg + z_tji;
+		z_tjp = z_tjb - 1;
+		z_tj9s = z_rv[z_tjb][20] * z_rv[z_tjb][20];
+		z_tj81 = z_rv[z_tjb][20] * z_rv[z_tjb][21];
+		z_tt[z_tjb][83] = z_tt[z_tjb][16] - z_tt[z_tjb][20];
+		z_tt[z_tjb][84] = z_tt[z_tjb][17] - z_tt[z_tjb][22];
+		z_tt[z_tjb][85] = z_tt[z_tjb][19] - z_tt[z_tjb][23];
+		z_tt[z_tjb][86] = -1.5 * z_tt[z_tjb][83] * z_tt[z_tjb][83] + z_tt[z_tjb][9] * z_tt[z_tjb][16] - z_tt[z_tjb][16] * z_tt[z_tjb][20];
+		z_tt[z_tjb][86] = z_tt[z_tjb][86] + z_tt[z_tjb][15] * z_tt[z_tjb][21] - z_tt[z_tjb][15] * z_tt[z_tjb][81] + z_tt[z_tjb][70];
+		z_tt[z_tjb][87] = (2 * z_tt[z_tjb][21] - z_tt[z_tjb][22] - z_tt[z_tjb][81]) * z_tt[z_tjb][16];
+		z_tt[z_tjb][87] = z_tt[z_tjb][87] + z_tt[z_tjb][9] * z_tt[z_tjb][21] - z_tt[z_tjb][20] * z_tt[z_tjb][81];
+		z_tt[z_tjb][88] = (2 * z_tt[z_tjb][23] - z_tt[z_tjb][82]) * z_tt[z_tjb][15] - z_tt[z_tjb][17] * z_tt[z_tjb][20] + z_tt[z_tjb][9] * z_tt[z_tjb][17];
+		z_tt[z_tjb][89] = -3 * z_tt[z_tjb][83] * z_tt[z_tjb][84] + z_tt[z_tjb][87] + z_tt[z_tjb][88] + z_tt[z_tjb][72];
+		z_tt[z_tjb][90] = -0.5 * z_tt[z_tjb][81] * z_tt[z_tjb][84] + z_tt[z_tjb][9] * z_tt[z_tjb][19] - z_tt[z_tjb][20] * z_tt[z_tjb][82];
+		z_tt[z_tjb][91] = z_tt[z_tjb][18] * z_tt[z_tjb][21] + z_tt[z_tjb][15] * z_tt[z_tjb][24] - z_tt[z_tjb][16] * z_tt[z_tjb][23] - z_tt[z_tjb][19] * z_tt[z_tjb][20];
+		z_tt[z_tjb][92] = -3 * z_tt[z_tjb][83] * z_tt[z_tjb][85] + z_tt[z_tjb][74] + z_tt[z_tjb][90] + z_tt[z_tjb][91];
+		z_tt[z_tjb][93] = 2 * (2 * z_tt[z_tjb][16] * z_tt[z_tjb][23] - z_tt[z_tjb][16] * z_tt[z_tjb][82] + z_tt[z_tjb][9] * z_tt[z_tjb][23]);
+		z_tt[z_tjb][93] = z_tt[z_tjb][93] - z_tt[z_tjb][17] * z_tt[z_tjb][22];
+		z_tt[z_tjb][94] = -1.5 * z_tt[z_tjb][84] * z_tt[z_tjb][84] + z_tt[z_tjb][81] * z_tt[z_tjb][84] + z_tt[z_tjb][76] + z_tt[z_tjb][93];
+		z_tt[z_tjb][95] = (2 * z_tt[z_tjb][18] - z_tt[z_tjb][17] + z_tt[z_tjb][81]) * z_tt[z_tjb][23];
+		z_tt[z_tjb][95] = z_tt[z_tjb][95] + z_tt[z_tjb][19] * z_tt[z_tjb][81] - z_tt[z_tjb][22] * z_tt[z_tjb][82];
+		z_tt[z_tjb][96] = (2 * z_tt[z_tjb][16] + z_tt[z_tjb][9]) * z_tt[z_tjb][24] - z_tt[z_tjb][19] * z_tt[z_tjb][22] - z_tt[z_tjb][18] * z_tt[z_tjb][82];
+		z_tt[z_tjb][97] = -3 * z_tt[z_tjb][84] * z_tt[z_tjb][85] + z_tt[z_tjb][95] + z_tt[z_tjb][96] + z_tt[z_tjb][78];
+		z_tt[z_tjb][98] = -1.5 * z_tt[z_tjb][85] * z_tt[z_tjb][85] + z_tt[z_tjb][24] * z_tt[z_tjb][81] + z_tt[z_tjb][18] * z_tt[z_tjb][24];
+		z_tt[z_tjb][98] = z_tt[z_tjb][98] - z_tt[z_tjb][23] * z_tt[z_tjb][82] - z_tt[z_tjb][19] * z_tt[z_tjb][23] + z_tt[z_tjb][80];
+		z_tt[z_tjb][99] = 0.5 * (z_tt[z_tjb][9] - z_tj9s) + z_tt[z_tjb][11];
+		z_tt[z_tjb][100] = z_tt[z_tjb][81] - z_tj81 + z_tt[z_tjb][12];
+		z_tjdr = 0;
+		if (z_tji > 1) { z_tjdr = z_rv[z_tjp][1] - z_tt[z_tjp][6]; }
+		z_tt[z_tjb][101] = z_tt[z_tjb][6] * z_tt[z_tjb][69] - z_tt[z_tjb][86];
+		z_tt[z_tjb][102] = -z_tt[z_tjp][6] * (z_tt[z_tjp][70] - z_tt[z_tjp][86] + z_tt[z_tjb][86]) + z_tt[z_tjb][6] * z_tt[z_tjb][70];
+		z_tt[z_tjb][102] = z_tt[z_tjb][102] - z_tt[z_tjp][31] * z_tt[z_tjp][99] + z_tt[z_tjp][102] - z_tjdr * z_rv[z_tjp][40];
+		z_tt[z_tjb][103] = z_tt[z_tjb][6] * z_tt[z_tjb][71] - z_tt[z_tjb][89];
+		z_tt[z_tjb][104] = -z_tt[z_tjp][6] * (z_tt[z_tjp][72] - z_tt[z_tjp][89] + z_tt[z_tjb][89]) + z_tt[z_tjb][6] * z_tt[z_tjb][72];
+		z_tt[z_tjb][104] = z_tt[z_tjb][104] - z_tt[z_tjp][31] * z_tt[z_tjp][100] - z_tt[z_tjp][32] * z_tt[z_tjp][99] + z_tt[z_tjp][104] - z_tjdr * z_rv[z_tjp][41];
+		z_tt[z_tjb][105] = z_tt[z_tjb][6] * z_tt[z_tjb][73] - z_tt[z_tjb][92];
+		z_tt[z_tjb][106] = -0.5 * z_tt[z_tjp][100] * z_tt[z_tjp][31] * z_tt[z_tjp][6] + z_tt[z_tjb][74] * z_tt[z_tjb][6] - z_tt[z_tjp][33] * z_tt[z_tjp][99];
+		z_tt[z_tjb][107] = -z_tt[z_tjp][6] * (z_tt[z_tjp][74] - z_tt[z_tjp][92] + z_tt[z_tjb][92]) + z_tt[z_tjb][106] + z_tt[z_tjp][107] - z_tjdr * z_rv[z_tjp][42];
+		z_tt[z_tjb][108] = z_tt[z_tjb][6] * z_tt[z_tjb][75] - z_tt[z_tjb][94];
+		z_tt[z_tjb][109] = -z_tt[z_tjp][6] * (z_tt[z_tjp][76] - z_tt[z_tjp][94] + z_tt[z_tjb][94]) - z_tt[z_tjp][32] * z_tt[z_tjp][100];
+		z_tt[z_tjb][109] = z_tt[z_tjb][109] + z_tt[z_tjb][6] * z_tt[z_tjb][76] + z_tt[z_tjp][109] - z_tjdr * z_rv[z_tjp][43];
+		z_tt[z_tjb][110] = z_tt[z_tjb][6] * z_tt[z_tjb][77] - z_tt[z_tjb][97];
+		z_tt[z_tjb][111] = -((0.5 * z_tt[z_tjp][6] * z_tt[z_tjp][32] + z_tt[z_tjp][33]) * z_tt[z_tjp][100]) + z_tt[z_tjb][6] * z_tt[z_tjb][78];
+		z_tt[z_tjb][112] = -z_tt[z_tjp][6] * (z_tt[z_tjp][78] - z_tt[z_tjp][97] + z_tt[z_tjb][97]) + z_tt[z_tjb][111] + z_tt[z_tjp][112] - z_tjdr * z_rv[z_tjp][44];
+		z_tt[z_tjb][113] = z_tt[z_tjb][6] * z_tt[z_tjb][79] - z_tt[z_tjb][98];
+		z_tjcar = z_tt[z_tjp][6] * (-0.5 * z_tt[z_tjp][33] * z_tt[z_tjp][100] - z_tt[z_tjp][80] + z_tt[z_tjp][98] - z_tt[z_tjb][98]);
+		z_tt[z_tjb][114] = z_tjcar + z_tt[z_tjb][6] * z_tt[z_tjb][80] + z_tt[z_tjp][114] - z_tjdr * z_rv[z_tjp][45];
+		z_tt[z_tjb][115] = -z_tt[z_tjb][6] * z_tt[z_tjb][101] + z_tt[z_tjb][102];
+		z_tt[z_tjb][116] = -z_tt[z_tjb][6] * z_tt[z_tjb][103] + z_tt[z_tjb][104];
+		z_tt[z_tjb][117] = -z_tt[z_tjb][6] * z_tt[z_tjb][105] + z_tt[z_tjb][107];
+		z_tt[z_tjb][118] = -z_tt[z_tjb][6] * z_tt[z_tjb][108] + z_tt[z_tjb][109];
+		z_tt[z_tjb][119] = -z_tt[z_tjb][6] * z_tt[z_tjb][110] + z_tt[z_tjb][112];
+		z_tt[z_tjb][120] = -z_tt[z_tjb][6] * z_tt[z_tjb][113] + z_tt[z_tjb][114];
+		z_tjy = z_rv[z_tjb][1];
+		z_tjpy = 0;
+		if (z_tji > 1) { z_tjpy = z_rv[z_tjp][1]; }
+		z_yf[z_tjb][10] = z_tjy * z_tt[z_tjb][69] - z_tt[z_tjb][86];
+		z_yf[z_tjb][11] = -z_tjpy * (z_tt[z_tjp][70] - z_tt[z_tjp][86] + z_tt[z_tjb][86]) + z_tjy * z_tt[z_tjb][70];
+		z_yf[z_tjb][11] = z_yf[z_tjb][11] - z_yf[z_tjp][7] * z_tt[z_tjp][99] + z_yf[z_tjp][11];
+		z_yf[z_tjb][12] = z_tjy * z_tt[z_tjb][71] - z_tt[z_tjb][89];
+		z_yf[z_tjb][13] = -z_tjpy * (z_tt[z_tjp][72] - z_tt[z_tjp][89] + z_tt[z_tjb][89]) + z_tjy * z_tt[z_tjb][72];
+		z_yf[z_tjb][13] = z_yf[z_tjb][13] - z_yf[z_tjp][7] * z_tt[z_tjp][100] - z_yf[z_tjp][8] * z_tt[z_tjp][99] + z_yf[z_tjp][13];
+		z_yf[z_tjb][14] = z_tjy * z_tt[z_tjb][73] - z_tt[z_tjb][92];
+		z_yf[z_tjb][15] = -0.5 * z_tt[z_tjp][100] * z_yf[z_tjp][7] * z_tjpy + z_tt[z_tjb][74] * z_tjy - z_yf[z_tjp][9] * z_tt[z_tjp][99];
+		z_yf[z_tjb][16] = -z_tjpy * (z_tt[z_tjp][74] - z_tt[z_tjp][92] + z_tt[z_tjb][92]) + z_yf[z_tjb][15] + z_yf[z_tjp][16];
+		z_yf[z_tjb][17] = z_tjy * z_tt[z_tjb][75] - z_tt[z_tjb][94];
+		z_yf[z_tjb][18] = -z_tjpy * (z_tt[z_tjp][76] - z_tt[z_tjp][94] + z_tt[z_tjb][94]) - z_yf[z_tjp][8] * z_tt[z_tjp][100];
+		z_yf[z_tjb][18] = z_yf[z_tjb][18] + z_tjy * z_tt[z_tjb][76] + z_yf[z_tjp][18];
+		z_yf[z_tjb][19] = z_tjy * z_tt[z_tjb][77] - z_tt[z_tjb][97];
+		z_yf[z_tjb][20] = -((0.5 * z_tjpy * z_yf[z_tjp][8] + z_yf[z_tjp][9]) * z_tt[z_tjp][100]) + z_tjy * z_tt[z_tjb][78];
+		z_yf[z_tjb][21] = -z_tjpy * (z_tt[z_tjp][78] - z_tt[z_tjp][97] + z_tt[z_tjb][97]) + z_yf[z_tjb][20] + z_yf[z_tjp][21];
+		z_yf[z_tjb][22] = z_tjy * z_tt[z_tjb][79] - z_tt[z_tjb][98];
+		z_tjcar = z_tjpy * (-0.5 * z_yf[z_tjp][9] * z_tt[z_tjp][100] - z_tt[z_tjp][80] + z_tt[z_tjp][98] - z_tt[z_tjb][98]);
+		z_yf[z_tjb][23] = z_tjcar + z_tjy * z_tt[z_tjb][80] + z_yf[z_tjp][23];
+		z_yf[z_tjb][24] = -z_tjy * z_yf[z_tjb][10] + z_yf[z_tjb][11];
+		z_yf[z_tjb][25] = -z_tjy * z_yf[z_tjb][12] + z_yf[z_tjb][13];
+		z_yf[z_tjb][26] = -z_tjy * z_yf[z_tjb][14] + z_yf[z_tjb][16];
+		z_yf[z_tjb][27] = -z_tjy * z_yf[z_tjb][17] + z_yf[z_tjb][18];
+		z_yf[z_tjb][28] = -z_tjy * z_yf[z_tjb][19] + z_yf[z_tjb][21];
+		z_yf[z_tjb][29] = -z_tjy * z_yf[z_tjb][22] + z_yf[z_tjb][23];
+	}
+	return (0);
+}
+
+static int
+z_s_pass()
+{
+	z_psr = z_psb;
+	z_psq = z_pscar;
+	z_psbq = z_psq;
+	z_psch = z_tt[z_psr][6];
+	z_tt[z_psr][134] = 6 * z_psch * z_tt[z_psr][121] + z_tt[z_psr][122];
+	z_tt[z_psr][136] = 0.5 * (z_tt[z_psr][134] + z_tt[z_psr][122]) * z_psch + z_tt[z_psr][123] + z_tt[z_psr][124];
+	z_tt[z_psr][138] = 4 * (z_tt[z_psr][136] - z_tt[z_psr][123] + z_tt[z_psr][124]);
+	z_tt[z_psr][140] = (-2 * z_psch * z_tt[z_psr][134] + 4 * z_tt[z_psr][136] + z_tt[z_psr][138] + 8 * z_tt[z_psr][124]) * z_psch + z_tt[z_psr][125];
+	z_tt[z_psr][143] = ((z_tt[z_psr][123] + z_tt[z_psr][124] - z_tt[z_psr][136]) * z_psch + 0.5 * z_tt[z_psr][140] + 0.5 * z_tt[z_psr][125]) * z_psch + z_tt[z_psr][126];
+	z_tt[z_psr][145] = (2 / 3) * (4 * (z_tt[z_psr][124] - z_tt[z_psr][123]) * z_psch + z_tt[z_psr][140] - z_tt[z_psr][125]) + z_tt[z_psr][127];
+	z_tt[z_psr][147] = (4 * (z_tt[z_psr][124] - z_tt[z_psr][123]) * z_psch + 3 * z_tt[z_psr][127] - 2 * z_tt[z_psr][125]) * z_psch;
+	z_tt[z_psr][147] = z_tt[z_psr][147] + z_tt[z_psr][128] - 4 * z_tt[z_psr][126] + 4 * z_tt[z_psr][143];
+	z_tt[z_psr][149] = (4 * z_psch * z_tt[z_psr][124] + z_tt[z_psr][125] + 0.75 * z_tt[z_psr][127] - 0.75 * z_tt[z_psr][145]) * z_psch;
+	z_tt[z_psr][149] = (z_tt[z_psr][149] + z_tt[z_psr][147] + 2 * z_tt[z_psr][126] + z_tt[z_psr][128]) * z_psch + z_tt[z_psr][129];
+	z_tt[z_psr][151] = ((z_psch * z_tt[z_psr][121] + z_tt[z_psr][122]) * z_psch + z_tt[z_psr][123] + 9 * z_tt[z_psr][124]) * z_psch;
+	z_tt[z_psr][151] = z_tt[z_psr][151] + z_tt[z_psr][125] + z_tt[z_psr][127];
+	z_tt[z_psr][152] = ((z_psch * z_tt[z_psr][151] + z_tt[z_psr][126] + z_tt[z_psr][128]) * z_psch + z_tt[z_psr][129]) * z_psch + z_tt[z_psr][130];
+	z_tt[z_psr][131] = 4 * ((-z_tt[z_psr][8] * z_tt[z_psr][15] + 2 * z_tt[z_psr][44]) * 0.125 * z_tt[z_psr][15] - z_tt[z_psr][20] * z_tt[z_psr][38]);
+	z_tt[z_psr][132] = (z_tt[z_psr][25] * z_tt[z_psr][25] + 3 * z_tt[z_psr][101]) * z_tt[z_psr][10] + z_tt[z_psr][25] * z_tt[z_psr][40] + z_tt[z_psr][121] + z_tt[z_psr][131];
+	z_psz = z_tt[z_psr][134];
+	z_psz = z_psz + 4 * (0.5 * (z_tt[z_psr][26] + z_tt[z_psr][27]) * z_tt[z_psr][25] + z_psbq * z_tt[z_psr][101] + 0.5 * z_tt[z_psr][102] + 0.75 * z_tt[z_psr][103]) * z_tt[z_psr][10];
+	z_psz = z_psz + 3 * (-(z_tt[z_psr][15] * z_tt[z_psr][16] + z_tt[z_psr][69] / 3) * z_tt[z_psr][8] + z_tt[z_psr][44] * z_tt[z_psr][83]);
+	z_psz = z_psz + 2 * (z_tt[z_psr][50] + z_tt[z_psr][54]) * z_tt[z_psr][15] + z_tt[z_psr][25] * z_tt[z_psr][45] + z_tt[z_psr][27] * z_tt[z_psr][40];
+	z_psz = z_psz - 4 * (z_tt[z_psr][21] + z_tt[z_psr][22]) * z_tt[z_psr][38];
+	z_tt[z_psr][135] = z_psz;
+	z_psz = z_tt[z_psr][136];
+	z_psz = z_psz + (2 * (z_psbq * z_tt[z_psr][102] + z_tt[z_psr][25] * z_tt[z_psr][29]) + z_tt[z_psr][26] * z_tt[z_psr][26] + 3 * z_tt[z_psr][105]) * z_tt[z_psr][10];
+	z_psz = z_psz - (0.5 * z_tt[z_psr][16] * z_tt[z_psr][16] + z_tt[z_psr][15] * z_tt[z_psr][18] + z_tt[z_psr][70]) * z_tt[z_psr][8];
+	z_psz = z_psz + z_tt[z_psr][25] * z_tt[z_psr][51] + z_tt[z_psr][29] * z_tt[z_psr][40];
+	z_psz = z_psz + 2 * (-2 * z_tt[z_psr][23] * z_tt[z_psr][38] + z_tt[z_psr][50] * z_tt[z_psr][83]) + z_tt[z_psr][15] * z_tt[z_psr][59];
+	z_psz = z_psz + 0.5 * z_tt[z_psr][44] * z_tt[z_psr][84] + z_tt[z_psr][13] * z_tt[z_psr][101];
+	z_tt[z_psr][137] = z_psz;
+	z_psz = z_tt[z_psr][138];
+	z_psz = z_psz + (2 * (2 * z_psbq * z_tt[z_psr][103] + z_tt[z_psr][25] * z_tt[z_psr][28] + z_tt[z_psr][26] * z_tt[z_psr][27]) + z_tt[z_psr][27] * z_tt[z_psr][27] + 2 * z_tt[z_psr][104] + 3 * z_tt[z_psr][108]) * z_tt[z_psr][10];
+	z_psz = z_psz - (4 * z_tt[z_psr][16] * z_tt[z_psr][16] + z_tt[z_psr][15] * z_tt[z_psr][17] + z_tt[z_psr][71]) * z_tt[z_psr][8];
+	z_psz = z_psz + 4 * (-2 * z_tt[z_psr][23] * z_tt[z_psr][38] + z_tt[z_psr][16] * z_tt[z_psr][50]) + z_tt[z_psr][27] * z_tt[z_psr][45] + z_tt[z_psr][25] * z_tt[z_psr][55];
+	z_psz = z_psz + 2 * ((3 * z_tt[z_psr][16] - z_tt[z_psr][20]) * z_tt[z_psr][54] + z_tt[z_psr][15] * z_tt[z_psr][59]);
+	z_psz = z_psz + (z_tt[z_psr][17] - 2 * z_tt[z_psr][21] - 3 * z_tt[z_psr][22]) * z_tt[z_psr][44];
+	z_tt[z_psr][139] = z_psz;
+	z_psz = z_tt[z_psr][140];
+	z_psz = z_psz + 2 * ((2 * z_tt[z_psr][105] + z_tt[z_psr][104]) * z_psbq + z_tt[z_psr][107] + 1.5 * z_tt[z_psr][110]) * z_tt[z_psr][10];
+	z_psz = z_psz + z_tt[z_psr][13] * z_tt[z_psr][103];
+	z_psz = z_psz + 2 * ((z_tt[z_psr][28] + z_tt[z_psr][29]) * z_tt[z_psr][26] + z_tt[z_psr][25] * z_tt[z_psr][30] + z_tt[z_psr][27] * z_tt[z_psr][29]) * z_tt[z_psr][10];
+	z_psz = z_psz - ((3 * z_tt[z_psr][18] + z_tt[z_psr][17]) * z_tt[z_psr][16] + z_tt[z_psr][15] * z_tt[z_psr][19] + z_tt[z_psr][72] + z_tt[z_psr][73]) * z_tt[z_psr][8];
+	z_psz = z_psz + (z_tt[z_psr][19] - 5 * z_tt[z_psr][23]) * z_tt[z_psr][44] + z_tt[z_psr][29] * z_tt[z_psr][45];
+	z_psz = z_psz + (3 * z_tt[z_psr][50] + z_tt[z_psr][54]) * z_tt[z_psr][84] + z_tt[z_psr][27] * z_tt[z_psr][51];
+	z_psz = z_psz + (5 * z_tt[z_psr][16] - z_tt[z_psr][20]) * z_tt[z_psr][59] + z_tt[z_psr][25] * z_tt[z_psr][61];
+	z_psz = z_psz + 4 * (z_tt[z_psr][15] * z_tt[z_psr][65] - z_tt[z_psr][24] * z_tt[z_psr][38]);
+	z_tt[z_psr][141] = z_psz;
+	z_psz = z_tt[z_psr][143];
+	z_psz = z_psz + (2 * (z_psbq * z_tt[z_psr][107] + z_tt[z_psr][26] * z_tt[z_psr][30]) + z_tt[z_psr][29] * z_tt[z_psr][29] + 3 * z_tt[z_psr][113]) * z_tt[z_psr][10];
+	z_psz = z_psz - (0.5 * z_tt[z_psr][18] * z_tt[z_psr][18] + z_tt[z_psr][16] * z_tt[z_psr][19] + z_tt[z_psr][74]) * z_tt[z_psr][8];
+	z_psz = z_psz + z_tt[z_psr][29] * z_tt[z_psr][51] + z_tt[z_psr][25] * z_tt[z_psr][66];
+	z_psz = z_psz + 2 * (2 * z_tt[z_psr][16] * z_tt[z_psr][65] + z_tt[z_psr][50] * z_tt[z_psr][85]);
+	z_psz = z_psz - z_tt[z_psr][24] * z_tt[z_psr][44] + z_tt[z_psr][13] * z_tt[z_psr][105];
+	z_psz = z_psz + 0.5 * z_tt[z_psr][59] * z_tt[z_psr][84];
+	z_tt[z_psr][144] = z_psz;
+	z_psz = z_tt[z_psr][145];
+	z_psz = z_psz + 2 * ((2 * z_psbq * z_tt[z_psr][108] + z_tt[z_psr][27] * z_tt[z_psr][28] + z_tt[z_psr][109]) * z_tt[z_psr][10] + z_tt[z_psr][54] * z_tt[z_psr][84]);
+	z_psz = z_psz - (2 * z_tt[z_psr][16] * z_tt[z_psr][17] + z_tt[z_psr][75]) * z_tt[z_psr][8] + z_tt[z_psr][27] * z_tt[z_psr][55];
+	z_psz = z_psz + 4 * (z_tt[z_psr][16] * z_tt[z_psr][59] - z_tt[z_psr][23] * z_tt[z_psr][44]);
+	z_tt[z_psr][146] = z_psz;
+	z_psz = z_tt[z_psr][147];
+	z_psz = z_psz - ((0.5 * z_tt[z_psr][17] + z_tt[z_psr][18]) * z_tt[z_psr][17] + z_tt[z_psr][76] + z_tt[z_psr][77]) * z_tt[z_psr][8] + z_tt[z_psr][13] * z_tt[z_psr][108];
+	z_psz = z_psz + 2 * (-z_tt[z_psr][8] * z_tt[z_psr][16] + z_tt[z_psr][54]) * z_tt[z_psr][19] + z_tt[z_psr][29] * z_tt[z_psr][55] + z_tt[z_psr][27] * z_tt[z_psr][61];
+	z_psz = z_psz + (2 * ((2 * z_tt[z_psr][110] + z_tt[z_psr][109]) * z_psbq + z_tt[z_psr][28] * z_tt[z_psr][29] + z_tt[z_psr][27] * z_tt[z_psr][30] + z_tt[z_psr][112]) + z_tt[z_psr][28] * z_tt[z_psr][28]) * z_tt[z_psr][10];
+	z_psz = z_psz + 8 * (-0.25 * ((2 * z_tt[z_psr][50] + 3 * z_tt[z_psr][54]) * z_tt[z_psr][23] + z_tt[z_psr][24] * z_tt[z_psr][44]) + z_tt[z_psr][16] * z_tt[z_psr][65]);
+	z_psz = z_psz + (3 * z_tt[z_psr][17] + 2 * z_tt[z_psr][18] - z_tt[z_psr][22]) * z_tt[z_psr][59];
+	z_tt[z_psr][148] = z_psz;
+	z_psz = z_tt[z_psr][149];
+	z_psz = z_psz + 2 * ((2 * z_tt[z_psr][113] + z_tt[z_psr][112]) * z_psbq + z_tt[z_psr][28] * z_tt[z_psr][30] + z_tt[z_psr][29] * z_tt[z_psr][30] + z_tt[z_psr][114]) * z_tt[z_psr][10];
+	z_psz = z_psz - ((z_tt[z_psr][17] + z_tt[z_psr][18]) * z_tt[z_psr][19] + z_tt[z_psr][78] + z_tt[z_psr][79]) * z_tt[z_psr][8] + z_tt[z_psr][13] * z_tt[z_psr][110];
+	z_psz = z_psz + 4 * ((z_tt[z_psr][17] + z_tt[z_psr][18]) * z_tt[z_psr][65] + 0.75 * z_tt[z_psr][59] * z_tt[z_psr][85]);
+	z_psz = z_psz + z_tt[z_psr][29] * z_tt[z_psr][61] + z_tt[z_psr][27] * z_tt[z_psr][66];
+	z_psz = z_psz - 2 * (z_tt[z_psr][50] + z_tt[z_psr][54]) * z_tt[z_psr][24];
+	z_tt[z_psr][150] = z_psz;
+	z_tt[z_psr][153] = (2 * z_psbq * z_tt[z_psr][114] + z_tt[z_psr][30] * z_tt[z_psr][30]) * z_tt[z_psr][10] + z_tt[z_psr][13] * z_tt[z_psr][113];
+	z_tt[z_psr][154] = -(0.5 * z_tt[z_psr][19] * z_tt[z_psr][19] + z_tt[z_psr][80]) * z_tt[z_psr][8] + z_tt[z_psr][29] * z_tt[z_psr][66] - z_tt[z_psr][24] * z_tt[z_psr][59];
+	z_tt[z_psr][155] = 4 * z_tt[z_psr][19] * z_tt[z_psr][65] + z_tt[z_psr][152] + z_tt[z_psr][153] + z_tt[z_psr][154];
+	z_po[1][1] = z_tt[z_psr][132];
+	z_po[1][2] = z_tt[z_psr][135];
+	z_po[1][3] = z_tt[z_psr][137];
+	z_po[1][4] = z_tt[z_psr][139];
+	z_po[1][5] = z_tt[z_psr][141];
+	z_po[1][6] = z_tt[z_psr][144];
+	z_po[1][7] = z_tt[z_psr][146];
+	z_po[1][8] = z_tt[z_psr][148];
+	z_po[1][9] = z_tt[z_psr][150];
+	z_po[1][10] = z_tt[z_psr][155];
+	z_po[2][1] = z_psq * z_tt[z_psr][132] + z_tt[z_psr][10] * z_tt[z_psr][115] + z_tt[z_psr][31] * z_tt[z_psr][40];
+	z_po[2][2] = z_psq * (2 * z_tt[z_psr][10] * z_tt[z_psr][115] + z_tt[z_psr][135]) + z_tt[z_psr][10] * z_tt[z_psr][116];
+	z_po[2][2] = z_po[2][2] + z_tt[z_psr][31] * z_tt[z_psr][45] + z_tt[z_psr][32] * z_tt[z_psr][40];
+	z_po[2][3] = z_psq * z_tt[z_psr][137] + z_tt[z_psr][10] * z_tt[z_psr][117] + z_tt[z_psr][13] * z_tt[z_psr][115];
+	z_po[2][3] = z_po[2][3] + z_tt[z_psr][31] * z_tt[z_psr][51] + z_tt[z_psr][33] * z_tt[z_psr][40];
+	z_po[2][4] = z_psq * (2 * z_tt[z_psr][116] * z_tt[z_psr][10] + z_tt[z_psr][139]) + z_tt[z_psr][118] * z_tt[z_psr][10];
+	z_po[2][4] = z_po[2][4] + z_tt[z_psr][31] * z_tt[z_psr][55] + z_tt[z_psr][32] * z_tt[z_psr][45];
+	z_po[2][5] = z_psq * (2 * z_tt[z_psr][117] * z_tt[z_psr][10] + z_tt[z_psr][141]) + z_tt[z_psr][119] * z_tt[z_psr][10] + z_tt[z_psr][13] * z_tt[z_psr][116];
+	z_po[2][5] = z_po[2][5] + z_tt[z_psr][31] * z_tt[z_psr][61] + z_tt[z_psr][32] * z_tt[z_psr][51] + z_tt[z_psr][33] * z_tt[z_psr][45];
+	z_po[2][6] = z_psq * z_tt[z_psr][144] + z_tt[z_psr][10] * z_tt[z_psr][120] + z_tt[z_psr][13] * z_tt[z_psr][117];
+	z_po[2][6] = z_po[2][6] + z_tt[z_psr][31] * z_tt[z_psr][66] + z_tt[z_psr][33] * z_tt[z_psr][51];
+	z_po[2][7] = z_psq * (2 * z_tt[z_psr][10] * z_tt[z_psr][118] + z_tt[z_psr][146]) + z_tt[z_psr][32] * z_tt[z_psr][55];
+	z_po[2][8] = z_psq * (2 * z_tt[z_psr][10] * z_tt[z_psr][119] + z_tt[z_psr][148]) + z_tt[z_psr][13] * z_tt[z_psr][118];
+	z_po[2][8] = z_po[2][8] + z_tt[z_psr][32] * z_tt[z_psr][61] + z_tt[z_psr][33] * z_tt[z_psr][55];
+	z_po[2][9] = z_psq * (2 * z_tt[z_psr][10] * z_tt[z_psr][120] + z_tt[z_psr][150]) + z_tt[z_psr][13] * z_tt[z_psr][119];
+	z_po[2][9] = z_po[2][9] + z_tt[z_psr][32] * z_tt[z_psr][66] + z_tt[z_psr][33] * z_tt[z_psr][61];
+	z_po[2][10] = z_psq * z_tt[z_psr][155] + z_tt[z_psr][13] * z_tt[z_psr][120] + z_tt[z_psr][33] * z_tt[z_psr][66];
+	return (0);
+}
+
+static int
+z_s_sqid()
+{
+	z_sqr = z_sqb;
+	z_sqvp = z_tt[z_sqr][2];
+	z_sqvq = z_tt[z_sqr][5];
+	z_sqp1 = z_tt[z_sqf][2];
+	z_sqq1 = z_tt[z_sqf][5];
+	z_sqap = z_tt[z_sqr][15];
+	z_sqaq = z_tt[z_sqr][20];
+	z_sqbp = z_tt[z_sqr][16];
+	z_sqbq = z_tt[z_sqr][21];
+	z_sqcp = 2 * z_sqbp;
+	z_sqcq = z_tt[z_sqr][22];
+	z_sqdp = z_tt[z_sqr][17];
+	z_sqdq = 2 * z_tt[z_sqr][23];
+	z_sqep = z_tt[z_sqr][18];
+	z_sqeq = z_tt[z_sqr][23];
+	z_sqfp = z_tt[z_sqr][19];
+	z_sqfq = z_tt[z_sqr][24];
+	z_sqac = z_sqap * z_sqeq - z_sqaq * z_sqep;
+	z_sqbc = z_sqcp * z_sqeq - z_sqcq * z_sqep;
+	z_sqa2 = z_sqbp * z_sqeq - z_sqbq * z_sqep;
+	z_sqa3 = z_sqbp * z_sqfq - z_sqbq * z_sqfp;
+	z_sqd1 = z_sqdp * z_sqbq - z_sqdq * z_sqbp;
+	z_sqd2 = z_sqdp * z_sqeq - z_sqdq * z_sqep;
+	z_sqc2 = z_sqcp * z_sqfq - z_sqcq * z_sqfp;
+	z_sqd3 = z_sqdp * z_sqfq - z_sqdq * z_sqfp;
+	z_sqcc = z_sqfp * z_sqeq - z_sqfq * z_sqep;
+	z_sqba = z_sqap * z_sqvq - z_sqaq * z_sqvp;
+	z_sqbb = z_sqbp * z_sqvq - z_sqbq * z_sqvp;
+	z_sqbd = z_sqdp * z_sqvq - z_sqdq * z_sqvp;
+	z_sqbe = z_sqep * z_sqvq - z_sqeq * z_sqvp;
+	z_sqbf = z_sqfp * z_sqvq - z_sqfq * z_sqvp;
+	z_sqdp2 = z_sqvp * z_sqvp - z_sqp1 * z_sqp1;
+	z_sqdq2 = z_sqvq * z_sqvq - z_sqq1 * z_sqq1;
+	z_sqdpq = z_sqvp * z_sqvq - z_sqp1 * z_sqq1;
+	z_sqo8 = z_sqd1 + 2 * z_sqa2 + 2 * z_sqbc + z_sqvp * z_sqbd - z_sqvp * z_sqvq * z_sqdpq;
+	z_sqo9 = 6 * z_sqac - z_sqvq * z_sqba + z_sqvp * z_sqbb - 1.5 * z_sqdp2 * z_sqdpq;
+	z_sqo11 = 4 * z_sqd2 + 2 * z_sqc2 + z_sqvq * z_sqbd + 2 * z_sqvp * z_sqbf;
+	z_sqo11 = z_sqo11 - (2 * z_sqvp * z_sqvq * z_sqvq * z_sqvq - z_sqvp * z_sqvq * z_sqq1 * z_sqq1 - z_sqvq * z_sqvq * z_sqp1 * z_sqq1);
+	z_sqo14 = 3 * z_sqd3 + 2 * z_sqcc + 2 * z_sqvq * z_sqbf - z_sqvq * z_sqvq * z_sqdq2;
+	z_sqo15 = 6 * z_sqa3 + z_sqvq * z_sqbe - z_sqvp * z_sqbf - 1.5 * z_sqdq2 * z_sqdpq;
+	z_sc[11][1] = (z_sqo9 + 2 * z_tt[z_sqr][73]) / 4;
+	z_sc[11][2] = z_sqo8 + 2 * z_tt[z_sqr][92];
+	z_sc[11][3] = (z_sqo15 + 4 * z_tt[z_sqr][79]) / 2;
+	z_sc[11][4] = (z_sqo11 + 2 * z_tt[z_sqr][97]) / 2;
+	z_sc[11][5] = z_sqo14 + 4 * z_tt[z_sqr][98];
+	return (0);
+}
+
+static int
+z_s_fam()
+{
+	z_fmr = z_fmb;
+	if (z_fmc == 1)
+	{
+		for (z_fmm = 1; z_fmm <= 9; z_fmm = z_fmm + (1))
+		{
+			z_tt[z_fmr][24 + z_fmm] = z_yf[z_fmr][z_fmm];
+		}
+		for (z_fmm = 1; z_fmm <= 20; z_fmm = z_fmm + (1))
+		{
+			z_tt[z_fmr][100 + z_fmm] = z_yf[z_fmr][9 + z_fmm];
+		}
+		z_fmq = z_rv[z_fmr][1];
+	}
+	else
+	{
+		for (z_fmm = 1; z_fmm <= 9; z_fmm = z_fmm + (1))
+		{
+			z_tt[z_fmr][24 + z_fmm] = z_sv[1][z_fmm];
+		}
+		for (z_fmm = 1; z_fmm <= 20; z_fmm = z_fmm + (1))
+		{
+			z_tt[z_fmr][100 + z_fmm] = z_sv[1][9 + z_fmm];
+		}
+		z_fmq = z_tt[z_fmr][6];
+	}
+	if (fabs(z_fmq) < 1E6)
+	{
+		z_sqb = z_fmr;
+		z_s_sqid();
+		z_tt[z_fmr][102] = z_fmq * z_tt[z_fmr][70] - z_sc[11][1];
+		z_tt[z_fmr][104] = z_fmq * z_tt[z_fmr][72] - z_sc[11][2];
+		z_tt[z_fmr][107] = z_fmq * z_tt[z_fmr][74] - z_sc[11][3];
+		z_tt[z_fmr][109] = z_fmq * z_tt[z_fmr][76] - z_sc[11][4];
+		z_tt[z_fmr][112] = z_fmq * z_tt[z_fmr][78] - z_sc[11][5];
+		if (fabs(z_tt[z_fmd][6]) < 1E6)
+		{
+			z_tt[z_fmr][114] = z_fmq * z_tt[z_fmr][80] + z_tt[z_fmd][69];
+		}
+		z_tt[z_fmr][115] = -z_fmq * z_tt[z_fmr][101] + z_tt[z_fmr][102];
+		z_tt[z_fmr][116] = -z_fmq * z_tt[z_fmr][103] + z_tt[z_fmr][104];
+		z_tt[z_fmr][117] = -z_fmq * z_tt[z_fmr][105] + z_tt[z_fmr][107];
+		z_tt[z_fmr][118] = -z_fmq * z_tt[z_fmr][108] + z_tt[z_fmr][109];
+		z_tt[z_fmr][119] = -z_fmq * z_tt[z_fmr][110] + z_tt[z_fmr][112];
+		z_tt[z_fmr][120] = -z_fmq * z_tt[z_fmr][113] + z_tt[z_fmr][114];
+	}
+	return (0);
+}
+
+static int
+z_s_tdzero()
+{
+	z_tt[z_tzb][10] = 0;
+	z_tt[z_tzb][13] = 0;
+	z_tt[z_tzb][38] = 0;
+	z_tt[z_tzb][44] = 0;
+	z_tt[z_tzb][50] = 0;
+	z_tt[z_tzb][54] = 0;
+	z_tt[z_tzb][59] = 0;
+	z_tt[z_tzb][65] = 0;
+	z_tt[z_tzb][45] = 0;
+	z_tt[z_tzb][51] = 0;
+	z_tt[z_tzb][55] = 0;
+	z_tt[z_tzb][61] = 0;
+	z_tt[z_tzb][66] = 0;
+	z_tt[z_tzb][40] = 0;
+	for (z_tzm = 1; z_tzm <= 10; z_tzm = z_tzm + (1))
+	{
+		z_tt[z_tzb][120 + z_tzm] = 0;
+	}
+	return (0);
+}
+
+// ---- generated: the macro's body from stage A on ----
+static int    z_stop;
+
+static int
+z_part1()
+{
+	z_cv = z_vfm[z_i][1];
+	z_nb = b7_ns[z_i - 1];
+	z_na = b7_ns[z_i];
+	if (z_rs == 2)
+	{
+		z_nb = -z_nb;
+		z_na = -z_na;
+	}
+	if (fabs(z_na) < z_eps) { z_na = 1; }
+	z_kk = z_nb / z_na;
+	z_km1 = z_kk - 1;
+	z_deln = z_nb - z_na;
+	if (z_rs == 1)
+	{
+		z_py = z_vec2[z_i + 1];
+		z_pu = z_vec2[500 + z_i];
+		z_pup = z_vec2[501 + z_i];
+		z_pyc = z_vec3[z_i + 1];
+		z_puc = z_vec3[500 + z_i];
+		z_pucp = z_vec3[501 + z_i];
+	}
+	else
+	{
+		z_py = z_vec3[z_i + 1];
+		z_pu = z_vec3[500 + z_i];
+		z_pup = z_vec3[501 + z_i];
+		z_pyc = z_vec2[z_i + 1];
+		z_puc = z_vec2[500 + z_i];
+		z_pucp = z_vec2[501 + z_i];
+	}
+	z_pai = z_cv * z_py + z_pu;
+	z_paip = z_pai * z_kk;
+	z_paic = z_cv * z_pyc + z_puc;
+	z_paicp = z_paic * z_kk;
+	z_pz = z_cv * z_km1 * z_lag * z_lag / z_nb;
+	z_sfm = z_nb * z_km1 * z_py * (z_pai + z_pup);
+	z_sfc = z_nb * z_km1 * z_pyc * (z_paic + z_pucp);
+	z_ba = z_sfm * z_pai * z_pai;
+	z_fa = z_sfm * z_pai * z_paic;
+	z_ca = z_sfm * z_paic * z_paic;
+	z_bb = z_sfc * z_paic * z_paic;
+	z_fb = z_sfc * z_pai * z_paic;
+	z_cb = z_sfc * z_pai * z_pai;
+	z_ea = z_fb + z_lag * z_km1 * z_paic * (z_pucp + z_puc);
+	z_eb = z_fa - z_lag * z_km1 * z_pai * (z_pup + z_pu);
+	z_w = (z_pai * z_pai + z_paip * z_paip + z_pup * z_pup - 3 * z_pu * z_pu) / 8;
+	z_x73 = 3 * z_pai * z_paip + 2 * z_pup * z_pup - 3 * z_pu * z_pu;
+	z_x74 = 3 * z_pai * z_paicp + 2 * z_pup * z_pucp - 3 * z_pu * z_puc;
+	z_x75 = 3 * z_paic * z_paicp + 2 * z_pucp * z_pucp - 3 * z_puc * z_puc;
+	z_x76 = z_pai * (3 * z_pu - z_pup);
+	z_x77 = z_paic * (2 * z_pu - z_pup) + z_pai * z_puc;
+	z_x78 = z_paic * (3 * z_puc - z_pucp);
+	z_x42 = z_pyc * z_pai * (z_paic - z_puc) + z_py * z_paic * (z_pucp + z_puc);
+	z_x82 = z_pyc * z_pu * (z_paic - z_puc) - z_py * z_paicp * (z_pucp + z_puc);
+	z_x42b = z_py * z_paic * (z_pai - z_pu) + z_pyc * z_pai * (z_pup + z_pu);
+	z_x82b = z_py * z_puc * (z_pai - z_pu) - z_pyc * z_paip * (z_pup + z_pu);
+	z_q1p = 3 * z_w * z_sfm * z_pai;
+	z_q2p = z_sfm * (z_paic * z_x73 + z_pai * z_x74 - z_pucp * z_x76 - z_pup * z_x77) / 4;
+	z_q3p = z_nb * z_km1 * (z_x42 * z_x73 + z_x76 * z_x82 + z_py * (z_pai + z_pup) * (z_pai * z_x75 - z_pup * z_x78)) / 4;
+	z_q4p = z_sfm * (z_paic * z_x74 - z_pucp * z_x77);
+	z_q5p = z_nb * z_km1 * (z_x42 * z_x74 + z_x77 * z_x82 + z_py * (z_pai + z_pup) * (z_paic * z_x75 - z_pucp * z_x78)) / 4;
+	z_q6p = z_nb * z_km1 * (z_x42 * z_x75 + z_x78 * z_x82) / 4;
+	z_q1q = z_nb * z_km1 * (z_x42b * z_x73 + z_x76 * z_x82b) / 4;
+	z_t1p = 10 * z_w * z_w + z_sfm * z_pai * z_cv * (2 * z_pup - 5 * z_pu) / z_nb / 8;
+	z_ib5 = z_pai * z_q1p;
+	z_if1 = z_paic * z_q1p + z_pai * z_q2p;
+	z_if2 = z_pai * z_q2p;
+	z_im1 = 2 * z_paic * z_q2p;
+	z_im2 = z_pai * z_q3p;
+	z_im3 = z_pai * z_q4p;
+	z_in1 = z_paic * z_q3p;
+	z_in2 = z_paic * z_q4p + 2 * z_pai * z_q5p;
+	z_in3 = z_pai * z_q5p;
+	z_ic5 = 0.5 * z_paic * z_q5p;
+	z_ip5 = z_pai * z_q6p - 0.5 * z_paic * z_q5p;
+	z_ie5 = z_paic * z_q6p;
+	z_ie5b = z_pai * z_q1q;
+	z_ib7 = z_ba * z_t1p;
+	z_mb = (z_rs - 1) * (z_nsm + 2) + z_i;
+	z_mq[z_mb][1] = z_ba;
+	z_mq[z_mb][2] = z_ib5;
+	z_mq[z_mb][3] = z_if2;
+	z_mq[z_mb][4] = z_im2;
+	z_mq[z_mb][5] = z_im3;
+	z_mq[z_mb][6] = z_in3;
+	z_mq[z_mb][7] = z_ip5 + z_ic5;
+	for (z_j = 8; z_j <= 14; z_j = z_j + (1))
+	{
+		z_mq[z_mb][z_j] = 0;
+	}
+	z_aba = 0;
+	z_afa = 0;
+	z_aca = 0;
+	z_aea = 0;
+	z_ab5 = 0;
+	z_af1 = 0;
+	z_af2 = 0;
+	z_am1 = 0;
+	z_am2 = 0;
+	z_am3 = 0;
+	z_an1 = 0;
+	z_an2 = 0;
+	z_an3 = 0;
+	z_ac5 = 0;
+	z_ap5 = 0;
+	z_ae5 = 0;
+	z_ab7 = 0;
+	return (0);
+}
+
+static int
+z_part2()
+{
+	if (z_vfm[z_i][6] == 1)
+	{
+		z_conic = z_vfm[z_i][2];
+		z_aterm = z_vfm[z_i][3];
+		z_bterm = z_vfm[z_i][4];
+		z_cterm = z_vfm[z_i][5];
+		z_cv2 = z_cv * z_cv;
+		z_cv3 = z_cv2 * z_cv;
+		z_c1 = 8 * z_aterm + z_conic * z_cv3;
+		z_c2 = 12 * z_bterm + 0.75 * z_cv2 * (z_cv3 * z_conic * (z_conic + 2) - 2 * z_c1);
+		z_tmp = z_cv3 * z_conic * (z_conic * z_conic + 3 * z_conic + 3) - 3 * z_c1;
+		z_tmp = z_cv2 * (5 * z_cv2 * z_tmp - 12 * z_c2);
+		z_tmp = (-6 * z_cv * z_c1 * z_c1 + z_tmp) / 8;
+		z_c3 = 16 * z_cterm + z_tmp;
+		z_c1b = z_deln * z_c1;
+		z_c2b = z_deln * z_c2;
+		z_c3b = z_deln * z_c3;
+		z_pysq = z_py * z_py;
+		z_pycsq = z_pyc * z_pyc;
+		z_aba = z_c1b * z_pysq * z_pysq;
+		z_afa = z_c1b * z_pysq * z_py * z_pyc;
+		z_aeb = z_afa;
+		z_aca = z_c1b * z_pysq * z_pycsq;
+		z_afgcb = z_aca;
+		z_aea = z_c1b * z_py * z_pycsq * z_pyc;
+		z_afb = z_aea;
+		z_abb = z_c1b * z_pycsq * z_pycsq;
+		z_ba = z_ba + z_aba;
+		z_fa = z_fa + z_afa;
+		z_ca = z_ca + z_aca;
+		z_ea = z_ea + z_aea;
+		z_bb = z_bb + z_abb;
+		z_fb = z_fb + z_afb;
+		z_cb = z_cb + z_afgcb;
+		z_eb = z_eb + z_aeb;
+		z_mm = z_kk * z_lag / z_na;
+		z_la = (3 * z_paip - 2 * (1 - 2 * z_kk) * z_pup) / 4;
+		z_lb = (3 * z_paicp - 2 * (1 - 2 * z_kk) * z_pucp) / 4;
+		z_as1p1 = z_aba * z_la;
+		z_as2p1 = 2 * z_afa * z_la + 0.5 * z_c1b * z_pysq * z_py * z_mm;
+		z_as3p1 = 2 * z_aca * z_la + z_c1b * z_pysq * z_pyc * z_mm;
+		z_as4p1 = 2 * z_as3p1;
+		z_as5p1 = 2 * z_aea * z_la + 1.5 * z_c1b * z_py * z_pycsq * z_mm;
+		z_as6p1 = z_abb * z_la + z_c1b * z_pycsq * z_pyc * z_mm;
+		z_as1q1 = z_aba * z_lb - z_c1b * z_pysq * z_py * z_mm;
+		z_j0a = z_c2b * z_py - 0.25 * z_cv * z_c1b * (3 * z_paip - 5 * z_pup);
+		z_j0b = z_c2b * z_pyc - 0.25 * z_cv * z_c1b * (3 * z_paicp - 5 * z_pucp);
+		z_alph = 0.5 * (z_pup * (z_pup - z_pai) + z_pai * (3 * z_paip - z_pup));
+		z_beta = z_pup * (z_pucp - z_paic) + z_pai * (3 * z_paicp - z_pucp);
+		z_gamm = 0.5 * (z_pucp * (z_pucp - z_paic) + z_paic * (3 * z_paicp - z_pucp));
+		z_lamb = z_alph * z_c1b + z_j0a * z_py;
+		z_muu = z_beta * z_c1b + 2 * z_j0a * z_pyc;
+		z_nuu = z_py * z_gamm * z_c1b + z_j0a * z_pycsq;
+		z_as1p2 = z_pysq * z_py * z_lamb;
+		z_as2p2 = z_pysq * z_pyc * z_lamb + 0.5 * z_pysq * z_py * z_muu;
+		z_as3p2 = z_py * z_pycsq * z_lamb + z_pysq * z_nuu;
+		z_as4p2 = 2 * z_pysq * z_pyc * z_muu;
+		z_as5p2 = 0.5 * z_py * z_pycsq * z_muu + z_py * z_pyc * z_nuu;
+		z_as6p2 = z_pycsq * z_nuu;
+		z_as1q2 = z_pysq * (z_alph * z_c1b * z_pyc + z_j0b * z_pysq);
+		z_as1pa = z_pai * z_as1p1 + z_py * z_as1p2;
+		z_as2pa = z_pai * z_as2p1 + z_py * z_as2p2;
+		z_as3pa = z_pai * z_as3p1 + z_py * z_as3p2;
+		z_as4pa = z_pai * z_as4p1 + z_py * z_as4p2;
+		z_as5pa = z_pai * z_as5p1 + z_py * z_as5p2;
+		z_as6pa = z_pai * z_as6p1 + z_py * z_as6p2;
+		z_as1pb = z_paic * z_as1p1 + z_pyc * z_as1p2;
+		z_as2pb = z_paic * z_as2p1 + z_pyc * z_as2p2;
+		z_as3pb = z_paic * z_as3p1 + z_pyc * z_as3p2;
+		z_as4pb = z_paic * z_as4p1 + z_pyc * z_as4p2;
+		z_as5pb = z_paic * z_as5p1 + z_pyc * z_as5p2;
+		z_as6pb = z_paic * z_as6p1 + z_pyc * z_as6p2;
+		z_as1qa = z_pai * z_as1q1 + z_py * z_as1q2;
+		z_ab5 = z_as1pa;
+		z_af1 = z_as1pb + z_as2pa;
+		z_af2 = z_as2pa;
+		z_am1 = 2 * z_as2pb;
+		z_am2 = z_as3pa;
+		z_am3 = z_as4pa;
+		z_an1 = z_as3pb;
+		z_an2 = z_as4pb + 2 * z_as5pa;
+		z_an3 = z_as5pa;
+		z_ac5 = 0.5 * z_as5pb;
+		z_ap5 = z_as6pa - 0.5 * z_as5pb;
+		z_ae5 = z_as6pb;
+		z_ae5b = z_as1qa;
+		z_ib5 = z_ib5 + z_ab5;
+		z_if1 = z_if1 + z_af1;
+		z_if2 = z_if2 + z_af2;
+		z_im1 = z_im1 + z_am1;
+		z_im2 = z_im2 + z_am2;
+		z_im3 = z_im3 + z_am3;
+		z_in1 = z_in1 + z_an1;
+		z_in2 = z_in2 + z_an2;
+		z_in3 = z_in3 + z_an3;
+		z_ic5 = z_ic5 + z_ac5;
+		z_ip5 = z_ip5 + z_ap5;
+		z_ie5 = z_ie5 + z_ae5;
+		z_ie5b = z_ie5b + z_ae5b;
+		z_gam1 = z_c1 * z_pysq;
+		z_gam2 = z_py * z_pysq * (z_c2 * z_py + 0.25 * z_cv * z_c1 * (z_pai + 3 * z_pu));
+		z_tq = z_cv2 * z_c1 * (z_pai * (z_pai + 5 * z_pu) - z_pu * (z_pai - 5 * z_pu)) / 8;
+		z_tq = z_tq + z_c1 * z_c1 * z_py * z_pai / 4;
+		z_gam3 = z_pysq * z_pysq * (z_tq + z_c3 * z_pysq + z_cv * z_c2 * z_py * (z_pai + 5 * z_pu) / 3);
+		z_d3 = z_cv * z_py * (4 * z_cv * z_py * (z_pai + z_pu) + z_paip * (5 * (2 * z_pup + z_pai) + z_paip));
+		z_t2q = z_kk * z_pup * (3 * z_pai * z_pai - 10 * z_pu * z_pu + z_paip * (4 * (2 * z_pup + z_paip + z_pai) + z_pai));
+		z_d3 = z_c1 * (z_gam1 * z_py * (1 + 2 * z_kk * z_km1) + z_d3 + z_t2q) / 8;
+		z_d3 = z_deln * z_pysq * z_pysq * (z_c2 * z_pysq * (4 * z_paip + 3 * z_pup * (2 * z_kk - 1)) / 6 + z_d3);
+		z_lq3 = z_py * z_gam3 * z_deln + 0.5 * (z_gam1 * (z_q1p + z_as1p1) + z_gam2 * z_sfm * z_pai);
+		z_ab7 = z_pai * z_d3 + z_py * z_lq3;
+		z_ib7 = z_ib7 + z_ab7;
+		z_mq[z_mb][8] = z_aba;
+		z_mq[z_mb][9] = z_ab5;
+		z_mq[z_mb][10] = z_af2;
+		z_mq[z_mb][11] = z_am2;
+		z_mq[z_mb][12] = z_am3;
+		z_mq[z_mb][13] = z_an3;
+		z_mq[z_mb][14] = z_ap5 + z_ac5;
+	}
+	return (0);
+}
+
+static int
+z_part3()
+{
+	if (z_rs == 1)
+	{
+		z_fo[z_i][1] = z_ba;
+		z_fo[z_i][2] = z_fa;
+		z_fo[z_i][3] = z_ca;
+		z_fo[z_i][4] = z_pz;
+		z_fo[z_i][5] = z_ea;
+		z_fo[z_i][10] = z_ib5;
+		z_fo[z_i][11] = z_if1;
+		z_fo[z_i][12] = z_if2;
+		z_fo[z_i][13] = z_im1;
+		z_fo[z_i][14] = z_im2;
+		z_fo[z_i][15] = z_im3;
+		z_fo[z_i][16] = z_in1;
+		z_fo[z_i][17] = z_in2;
+		z_fo[z_i][18] = z_in3;
+		z_fo[z_i][19] = z_ic5;
+		z_fo[z_i][20] = z_ip5;
+		z_fo[z_i][21] = z_ie5;
+		z_fo[z_i][22] = z_ib7;
+		z_fo[z_i][41] = z_aba;
+		z_fo[z_i][42] = z_afa;
+		z_fo[z_i][43] = z_aca;
+		z_fo[z_i][44] = z_aea;
+		z_fo[z_i][45] = z_ab5;
+		z_fo[z_i][46] = z_af1;
+		z_fo[z_i][47] = z_af2;
+		z_fo[z_i][48] = z_am1;
+		z_fo[z_i][49] = z_am2;
+		z_fo[z_i][50] = z_am3;
+		z_fo[z_i][51] = z_an1;
+		z_fo[z_i][52] = z_an2;
+		z_fo[z_i][53] = z_an3;
+		z_fo[z_i][54] = z_ac5;
+		z_fo[z_i][55] = z_ap5;
+		z_fo[z_i][56] = z_ae5;
+		z_fo[z_i][57] = z_ab7;
+		z_z = 0.5 * z_acb * z_acb * (z_pz + 3 * z_ca) / z_lag;
+		z_z = z_z + 3 * (z_acb5 - z_acb * z_aceb / z_lag) * z_fa;
+		z_z = z_z + 3 * (0.5 * z_aceb * z_aceb / z_lag - z_ace5b) * z_ba;
+		z_z = (z_z + z_acb * (z_if1 + z_if2) - 5 * z_aceb * z_ib5) / (2 * z_lag);
+		z_tb7 = z_ib7 + z_z;
+		z_tb5 = z_ib5 + 1.5 * (z_acb * z_fa - z_aceb * z_ba) / z_lag;
+		z_z = z_acb * (z_pz + 4 * z_ca) + (5 * z_acf - 4 * z_aceb) * z_fa;
+		z_z = z_z - (2 * z_acpi + 5 * z_accb) * z_ba;
+		z_tf1 = z_if1 + z_z / (2 * z_lag);
+		z_z = z_acb * (z_pz + 2 * z_ca) + 2 * (2 * z_acf - z_aceb) * z_fa;
+		z_z = z_z - (z_acpi + 4 * z_accb) * z_ba;
+		z_tf2 = z_if2 + z_z / (2 * z_lag);
+		z_z = z_acb * z_ea + (4 * z_acf - z_aceb) * z_ca - z_acfb * z_ba;
+		z_z = z_z + (z_acc - 4 * z_accb - 2 * z_acpi) * z_fa;
+		z_tm1 = z_im1 + z_z / z_lag;
+		z_z = z_acb * z_ea + (2 * z_acf - z_aceb) * (z_pz + z_ca);
+		z_z = z_z + (3 * z_acc - 2 * z_accb + z_acpi) * z_fa - 3 * z_acfb * z_ba;
+		z_tm2 = z_im2 + z_z / (2 * z_lag);
+		z_z = z_acf * (z_pz + 2 * z_ca) - z_acfb * z_ba + (z_acc - 2 * z_accb) * z_fa;
+		z_tm3 = z_im3 + 2 * z_z / z_lag;
+		z_z = 3 * z_acf * z_ea - (z_acpi + z_accb) * (z_pz + z_ca) + 2 * (z_acc - z_accb) * z_ca;
+		z_z = z_z + (z_ace - 2 * z_acfb) * z_fa - z_acbb * z_ba;
+		z_tn1 = z_in1 + z_z / (2 * z_lag);
+		z_z = 3 * z_acf * z_ea + (z_acpi - z_accb + 3 * z_acc) * (z_pz + 3 * z_ca);
+		z_z = z_z - z_acbb * z_ba;
+		z_z = z_z - (z_acpi + z_acc) * z_ca;
+		z_z = z_z + (z_ace - 8 * z_acfb) * z_fa;
+		z_tn2 = z_in2 + z_z / z_lag;
+		z_z = z_acf * z_ea + (3 * z_acc + z_acpi - z_accb) * (z_pz + z_ca) - z_acbb * z_ba;
+		z_z = z_z + (z_acpi + z_acc) * z_ca + (z_ace - 4 * z_acfb) * z_fa;
+		z_tn3 = z_in3 + z_z / (2 * z_lag);
+		z_z = (4 * z_acc + z_acpi) * z_ea - z_acfb * z_pz + 2 * (z_ace - 2 * z_acfb) * z_ca;
+		z_z = z_z - 2 * z_acbb * z_fa;
+		z_tc5 = z_ic5 + z_z / (4 * z_lag);
+		z_z = (z_acpi - 2 * z_acc) * z_ea + (4 * z_ace - z_acfb) * z_pz;
+		z_z = z_z - 2 * z_acbb * z_fa;
+		z_z = z_z + 2 * (z_ace + z_acfb) * z_ca;
+		z_tp5 = z_ip5 + z_z / (4 * z_lag);
+		z_te5 = z_ie5 + (3 * z_ace * z_ea - z_acbb * (z_pz + 3 * z_ca)) / (2 * z_lag);
+		z_te5b = z_ie5b + (z_acb * (z_pz + 3 * z_cb) - 3 * z_aceb * z_eb) / (2 * z_lag);
+		z_fo[z_i][30] = z_tb5;
+		z_fo[z_i][31] = z_tf1;
+		z_fo[z_i][32] = z_tf2;
+		z_fo[z_i][33] = z_tm1;
+		z_fo[z_i][34] = z_tm2;
+		z_fo[z_i][35] = z_tm3;
+		z_fo[z_i][36] = z_tn1;
+		z_fo[z_i][37] = z_tn2;
+		z_fo[z_i][38] = z_tn3;
+		z_fo[z_i][39] = z_tc5;
+		z_fo[z_i][40] = z_tp5;
+		z_fo[z_i][23] = z_te5;
+		z_fo[z_i][24] = z_tb7;
+		z_acb = z_acb + z_ba;
+		z_acf = z_acf + z_fa;
+		z_acc = z_acc + z_ca;
+		z_ace = z_ace + z_ea;
+		z_acpi = z_acpi + z_pz;
+		z_acbb = z_acbb + z_bb;
+		z_acfb = z_acfb + z_fb;
+		z_accb = z_accb + z_cb;
+		z_aceb = z_aceb + z_eb;
+		z_acb5 = z_acb5 + z_tb5;
+		z_ace5b = z_ace5b + z_te5b;
+	}
+	return (0);
+}
+
+static int
+z_part4()
+{
+	for (z_rs = 1; z_rs <= 2; z_rs = z_rs + (1))
+	{
+		z_acb = 0;
+		z_acf = 0;
+		z_acc = 0;
+		z_ace = 0;
+		z_acpi = 0;
+		z_acbb = 0;
+		z_acfb = 0;
+		z_accb = 0;
+		z_aceb = 0;
+		z_acb5 = 0;
+		z_ace5b = 0;
+		for (z_i = 1; z_i <= z_nsm; z_i = z_i + (1))
+		{
+			z_part1();
+			z_part2();
+			z_part3();
+		}
+	}
+	z_sumb = 0;
+	z_sumf = 0;
+	z_sumc = 0;
+	z_sump = 0;
+	z_sume = 0;
+	z_sb5 = 0;
+	z_sf1 = 0;
+	z_sf2 = 0;
+	z_sm1 = 0;
+	z_sm2 = 0;
+	z_sm3 = 0;
+	z_sn1 = 0;
+	z_sn2 = 0;
+	z_sn3 = 0;
+	z_sc5 = 0;
+	z_sp5 = 0;
+	z_se5 = 0;
+	z_sb7 = 0;
+	for (z_i = 1; z_i <= z_nsm; z_i = z_i + (1))
+	{
+		z_sumb = z_sumb + z_fo[z_i][1];
+		z_sumf = z_sumf + z_fo[z_i][2];
+		z_sumc = z_sumc + z_fo[z_i][3];
+		z_sump = z_sump + z_fo[z_i][4];
+		z_sume = z_sume + z_fo[z_i][5];
+		z_sb5 = z_sb5 + z_fo[z_i][30];
+		z_sf1 = z_sf1 + z_fo[z_i][31];
+		z_sf2 = z_sf2 + z_fo[z_i][32];
+		z_sm1 = z_sm1 + z_fo[z_i][33];
+		z_sm2 = z_sm2 + z_fo[z_i][34];
+		z_sm3 = z_sm3 + z_fo[z_i][35];
+		z_sn1 = z_sn1 + z_fo[z_i][36];
+		z_sn2 = z_sn2 + z_fo[z_i][37];
+		z_sn3 = z_sn3 + z_fo[z_i][38];
+		z_sc5 = z_sc5 + z_fo[z_i][39];
+		z_sp5 = z_sp5 + z_fo[z_i][40];
+		z_se5 = z_se5 + z_fo[z_i][23];
+		z_sb7 = z_sb7 + z_fo[z_i][24];
+	}
+	strcat(b7_ln, "Third and fifth order, per surface, unconverted - multiply by the F/number"); b7_out();
+	strcat(b7_ln, "above for a transverse aberration in lens units, which is done for the totals."); b7_out();
+	strcat(b7_ln, " "); b7_out();
+	strcat(b7_ln, " Surf              B              F              C             Pi              E"); b7_out();
+	for (z_i = 1; z_i <= z_nsm; z_i = z_i + (1))
+	{
+		sprintf(b7_tmp, "%5.0f", 1.0*(z_i)); strcat(b7_ln, b7_tmp);
+		sprintf(b7_tmp, "%15.6e", 1.0*(z_fo[z_i][1])); strcat(b7_ln, b7_tmp); sprintf(b7_tmp, "%15.6e", 1.0*(z_fo[z_i][2])); strcat(b7_ln, b7_tmp); sprintf(b7_tmp, "%15.6e", 1.0*(z_fo[z_i][3])); strcat(b7_ln, b7_tmp); sprintf(b7_tmp, "%15.6e", 1.0*(z_fo[z_i][4])); strcat(b7_ln, b7_tmp); sprintf(b7_tmp, "%15.6e", 1.0*(z_fo[z_i][5])); strcat(b7_ln, b7_tmp); b7_out();
+	}
+	strcat(b7_ln, " "); b7_out();
+	strcat(b7_ln, "  SUM");
+	sprintf(b7_tmp, "%15.6e", 1.0*(z_sumb)); strcat(b7_ln, b7_tmp); sprintf(b7_tmp, "%15.6e", 1.0*(z_sumf)); strcat(b7_ln, b7_tmp); sprintf(b7_tmp, "%15.6e", 1.0*(z_sumc)); strcat(b7_ln, b7_tmp); sprintf(b7_tmp, "%15.6e", 1.0*(z_sump)); strcat(b7_ln, b7_tmp); sprintf(b7_tmp, "%15.6e", 1.0*(z_sume)); strcat(b7_ln, b7_tmp); b7_out();
+	strcat(b7_ln, " "); b7_out();
+	strcat(b7_ln, "System totals, transverse measure"); b7_out();
+	strcat(b7_ln, "   B  "); sprintf(b7_tmp, "%15.6e", 1.0*(z_sumb * z_fnum)); strcat(b7_ln, b7_tmp); strcat(b7_ln, "   F  "); sprintf(b7_tmp, "%15.6e", 1.0*(z_sumf * z_fnum)); strcat(b7_ln, b7_tmp); strcat(b7_ln, "   C  "); sprintf(b7_tmp, "%15.6e", 1.0*(z_sumc * z_fnum)); strcat(b7_ln, b7_tmp); b7_out();
+	strcat(b7_ln, "   Pi "); sprintf(b7_tmp, "%15.6e", 1.0*(z_sump * z_fnum)); strcat(b7_ln, b7_tmp); strcat(b7_ln, "   E  "); sprintf(b7_tmp, "%15.6e", 1.0*(z_sume * z_fnum)); strcat(b7_ln, b7_tmp); b7_out();
+	strcat(b7_ln, "   B5 "); sprintf(b7_tmp, "%15.6e", 1.0*(z_sb5 * z_fnum)); strcat(b7_ln, b7_tmp); strcat(b7_ln, "   F1 "); sprintf(b7_tmp, "%15.6e", 1.0*(z_sf1 * z_fnum)); strcat(b7_ln, b7_tmp); strcat(b7_ln, "   F2 "); sprintf(b7_tmp, "%15.6e", 1.0*(z_sf2 * z_fnum)); strcat(b7_ln, b7_tmp); b7_out();
+	strcat(b7_ln, "   M1 "); sprintf(b7_tmp, "%15.6e", 1.0*(z_sm1 * z_fnum)); strcat(b7_ln, b7_tmp); strcat(b7_ln, "   M2 "); sprintf(b7_tmp, "%15.6e", 1.0*(z_sm2 * z_fnum)); strcat(b7_ln, b7_tmp); strcat(b7_ln, "   M3 "); sprintf(b7_tmp, "%15.6e", 1.0*(z_sm3 * z_fnum)); strcat(b7_ln, b7_tmp); b7_out();
+	strcat(b7_ln, "   N1 "); sprintf(b7_tmp, "%15.6e", 1.0*(z_sn1 * z_fnum)); strcat(b7_ln, b7_tmp); strcat(b7_ln, "   N2 "); sprintf(b7_tmp, "%15.6e", 1.0*(z_sn2 * z_fnum)); strcat(b7_ln, b7_tmp); strcat(b7_ln, "   N3 "); sprintf(b7_tmp, "%15.6e", 1.0*(z_sn3 * z_fnum)); strcat(b7_ln, b7_tmp); b7_out();
+	strcat(b7_ln, "   C5 "); sprintf(b7_tmp, "%15.6e", 1.0*(z_sc5 * z_fnum)); strcat(b7_ln, b7_tmp); strcat(b7_ln, "   Pi5"); sprintf(b7_tmp, "%15.6e", 1.0*(z_sp5 * z_fnum)); strcat(b7_ln, b7_tmp); strcat(b7_ln, "   E5 "); sprintf(b7_tmp, "%15.6e", 1.0*(z_se5 * z_fnum)); strcat(b7_ln, b7_tmp); b7_out();
+	strcat(b7_ln, "   B7 "); sprintf(b7_tmp, "%15.6e", 1.0*(z_sb7 * z_fnum)); strcat(b7_ln, b7_tmp); b7_out();
+	strcat(b7_ln, " "); b7_out();
+	if (z_srf == 1)
+	{
+		z_uz = 0;
+		strcat(b7_ln, " "); b7_out();
+		strcat(b7_ln, "==============================================================================="); b7_out();
+		strcat(b7_ln, "THIRD AND FIFTH ORDER, SURFACE BY SURFACE - intrinsic, figuring, induced."); b7_out();
+		strcat(b7_ln, "Transverse measure. Each column adds down to the system total printed above."); b7_out();
+		strcat(b7_ln, "==============================================================================="); b7_out();
+		for (z_i = 1; z_i <= z_nsm; z_i = z_i + (1))
+		{
+			strcat(b7_ln, " "); b7_out();
+			if (z_vfm[z_i][6] == 1)
+			{
+				strcat(b7_ln, "Surface "); sprintf(b7_tmp, "%3.0f", 1.0*(z_i)); strcat(b7_ln, b7_tmp); strcat(b7_ln, "   (figured)"); b7_out();
+			}
+			else
+			{
+				strcat(b7_ln, "Surface "); sprintf(b7_tmp, "%3.0f", 1.0*(z_i)); strcat(b7_ln, b7_tmp); strcat(b7_ln, "   (spherical)"); b7_out();
+			}
+			strcat(b7_ln, "                          B              F              C             Pi              E"); b7_out();
+			strcat(b7_ln, "   intrinsic  "); sprintf(b7_tmp, "%15.6e", 1.0*((z_fo[z_i][1] - z_fo[z_i][41]) * z_fnum)); strcat(b7_ln, b7_tmp); sprintf(b7_tmp, "%15.6e", 1.0*((z_fo[z_i][2] - z_fo[z_i][42]) * z_fnum)); strcat(b7_ln, b7_tmp); sprintf(b7_tmp, "%15.6e", 1.0*((z_fo[z_i][3] - z_fo[z_i][43]) * z_fnum)); strcat(b7_ln, b7_tmp); sprintf(b7_tmp, "%15.6e", 1.0*(z_fo[z_i][4] * z_fnum)); strcat(b7_ln, b7_tmp); sprintf(b7_tmp, "%15.6e", 1.0*((z_fo[z_i][5] - z_fo[z_i][44]) * z_fnum)); strcat(b7_ln, b7_tmp); b7_out();
+			strcat(b7_ln, "   figuring   "); sprintf(b7_tmp, "%15.6e", 1.0*(z_fo[z_i][41] * z_fnum)); strcat(b7_ln, b7_tmp); sprintf(b7_tmp, "%15.6e", 1.0*(z_fo[z_i][42] * z_fnum)); strcat(b7_ln, b7_tmp); sprintf(b7_tmp, "%15.6e", 1.0*(z_fo[z_i][43] * z_fnum)); strcat(b7_ln, b7_tmp); sprintf(b7_tmp, "%15.6e", 1.0*(z_uz)); strcat(b7_ln, b7_tmp); sprintf(b7_tmp, "%15.6e", 1.0*(z_fo[z_i][44] * z_fnum)); strcat(b7_ln, b7_tmp); b7_out();
+			strcat(b7_ln, "   TOTAL      "); sprintf(b7_tmp, "%15.6e", 1.0*(z_fo[z_i][1] * z_fnum)); strcat(b7_ln, b7_tmp); sprintf(b7_tmp, "%15.6e", 1.0*(z_fo[z_i][2] * z_fnum)); strcat(b7_ln, b7_tmp); sprintf(b7_tmp, "%15.6e", 1.0*(z_fo[z_i][3] * z_fnum)); strcat(b7_ln, b7_tmp); sprintf(b7_tmp, "%15.6e", 1.0*(z_fo[z_i][4] * z_fnum)); strcat(b7_ln, b7_tmp); sprintf(b7_tmp, "%15.6e", 1.0*(z_fo[z_i][5] * z_fnum)); strcat(b7_ln, b7_tmp); b7_out();
+			strcat(b7_ln, "                         B5             F1             F2             M1             M2"); b7_out();
+			strcat(b7_ln, "   intrinsic  "); sprintf(b7_tmp, "%15.6e", 1.0*((z_fo[z_i][10] - z_fo[z_i][45]) * z_fnum)); strcat(b7_ln, b7_tmp); sprintf(b7_tmp, "%15.6e", 1.0*((z_fo[z_i][11] - z_fo[z_i][46]) * z_fnum)); strcat(b7_ln, b7_tmp); sprintf(b7_tmp, "%15.6e", 1.0*((z_fo[z_i][12] - z_fo[z_i][47]) * z_fnum)); strcat(b7_ln, b7_tmp); sprintf(b7_tmp, "%15.6e", 1.0*((z_fo[z_i][13] - z_fo[z_i][48]) * z_fnum)); strcat(b7_ln, b7_tmp); sprintf(b7_tmp, "%15.6e", 1.0*((z_fo[z_i][14] - z_fo[z_i][49]) * z_fnum)); strcat(b7_ln, b7_tmp); b7_out();
+			strcat(b7_ln, "   figuring   "); sprintf(b7_tmp, "%15.6e", 1.0*(z_fo[z_i][45] * z_fnum)); strcat(b7_ln, b7_tmp); sprintf(b7_tmp, "%15.6e", 1.0*(z_fo[z_i][46] * z_fnum)); strcat(b7_ln, b7_tmp); sprintf(b7_tmp, "%15.6e", 1.0*(z_fo[z_i][47] * z_fnum)); strcat(b7_ln, b7_tmp); sprintf(b7_tmp, "%15.6e", 1.0*(z_fo[z_i][48] * z_fnum)); strcat(b7_ln, b7_tmp); sprintf(b7_tmp, "%15.6e", 1.0*(z_fo[z_i][49] * z_fnum)); strcat(b7_ln, b7_tmp); b7_out();
+			strcat(b7_ln, "   induced    "); sprintf(b7_tmp, "%15.6e", 1.0*((z_fo[z_i][30] - z_fo[z_i][10]) * z_fnum)); strcat(b7_ln, b7_tmp); sprintf(b7_tmp, "%15.6e", 1.0*((z_fo[z_i][31] - z_fo[z_i][11]) * z_fnum)); strcat(b7_ln, b7_tmp); sprintf(b7_tmp, "%15.6e", 1.0*((z_fo[z_i][32] - z_fo[z_i][12]) * z_fnum)); strcat(b7_ln, b7_tmp); sprintf(b7_tmp, "%15.6e", 1.0*((z_fo[z_i][33] - z_fo[z_i][13]) * z_fnum)); strcat(b7_ln, b7_tmp); sprintf(b7_tmp, "%15.6e", 1.0*((z_fo[z_i][34] - z_fo[z_i][14]) * z_fnum)); strcat(b7_ln, b7_tmp); b7_out();
+			strcat(b7_ln, "   TOTAL      "); sprintf(b7_tmp, "%15.6e", 1.0*(z_fo[z_i][30] * z_fnum)); strcat(b7_ln, b7_tmp); sprintf(b7_tmp, "%15.6e", 1.0*(z_fo[z_i][31] * z_fnum)); strcat(b7_ln, b7_tmp); sprintf(b7_tmp, "%15.6e", 1.0*(z_fo[z_i][32] * z_fnum)); strcat(b7_ln, b7_tmp); sprintf(b7_tmp, "%15.6e", 1.0*(z_fo[z_i][33] * z_fnum)); strcat(b7_ln, b7_tmp); sprintf(b7_tmp, "%15.6e", 1.0*(z_fo[z_i][34] * z_fnum)); strcat(b7_ln, b7_tmp); b7_out();
+			strcat(b7_ln, "                         M3             N1             N2             N3             C5"); b7_out();
+			strcat(b7_ln, "   intrinsic  "); sprintf(b7_tmp, "%15.6e", 1.0*((z_fo[z_i][15] - z_fo[z_i][50]) * z_fnum)); strcat(b7_ln, b7_tmp); sprintf(b7_tmp, "%15.6e", 1.0*((z_fo[z_i][16] - z_fo[z_i][51]) * z_fnum)); strcat(b7_ln, b7_tmp); sprintf(b7_tmp, "%15.6e", 1.0*((z_fo[z_i][17] - z_fo[z_i][52]) * z_fnum)); strcat(b7_ln, b7_tmp); sprintf(b7_tmp, "%15.6e", 1.0*((z_fo[z_i][18] - z_fo[z_i][53]) * z_fnum)); strcat(b7_ln, b7_tmp); sprintf(b7_tmp, "%15.6e", 1.0*((z_fo[z_i][19] - z_fo[z_i][54]) * z_fnum)); strcat(b7_ln, b7_tmp); b7_out();
+			strcat(b7_ln, "   figuring   "); sprintf(b7_tmp, "%15.6e", 1.0*(z_fo[z_i][50] * z_fnum)); strcat(b7_ln, b7_tmp); sprintf(b7_tmp, "%15.6e", 1.0*(z_fo[z_i][51] * z_fnum)); strcat(b7_ln, b7_tmp); sprintf(b7_tmp, "%15.6e", 1.0*(z_fo[z_i][52] * z_fnum)); strcat(b7_ln, b7_tmp); sprintf(b7_tmp, "%15.6e", 1.0*(z_fo[z_i][53] * z_fnum)); strcat(b7_ln, b7_tmp); sprintf(b7_tmp, "%15.6e", 1.0*(z_fo[z_i][54] * z_fnum)); strcat(b7_ln, b7_tmp); b7_out();
+			strcat(b7_ln, "   induced    "); sprintf(b7_tmp, "%15.6e", 1.0*((z_fo[z_i][35] - z_fo[z_i][15]) * z_fnum)); strcat(b7_ln, b7_tmp); sprintf(b7_tmp, "%15.6e", 1.0*((z_fo[z_i][36] - z_fo[z_i][16]) * z_fnum)); strcat(b7_ln, b7_tmp); sprintf(b7_tmp, "%15.6e", 1.0*((z_fo[z_i][37] - z_fo[z_i][17]) * z_fnum)); strcat(b7_ln, b7_tmp); sprintf(b7_tmp, "%15.6e", 1.0*((z_fo[z_i][38] - z_fo[z_i][18]) * z_fnum)); strcat(b7_ln, b7_tmp); sprintf(b7_tmp, "%15.6e", 1.0*((z_fo[z_i][39] - z_fo[z_i][19]) * z_fnum)); strcat(b7_ln, b7_tmp); b7_out();
+			strcat(b7_ln, "   TOTAL      "); sprintf(b7_tmp, "%15.6e", 1.0*(z_fo[z_i][35] * z_fnum)); strcat(b7_ln, b7_tmp); sprintf(b7_tmp, "%15.6e", 1.0*(z_fo[z_i][36] * z_fnum)); strcat(b7_ln, b7_tmp); sprintf(b7_tmp, "%15.6e", 1.0*(z_fo[z_i][37] * z_fnum)); strcat(b7_ln, b7_tmp); sprintf(b7_tmp, "%15.6e", 1.0*(z_fo[z_i][38] * z_fnum)); strcat(b7_ln, b7_tmp); sprintf(b7_tmp, "%15.6e", 1.0*(z_fo[z_i][39] * z_fnum)); strcat(b7_ln, b7_tmp); b7_out();
+			strcat(b7_ln, "                        Pi5             E5             B7"); b7_out();
+			strcat(b7_ln, "   intrinsic  "); sprintf(b7_tmp, "%15.6e", 1.0*((z_fo[z_i][20] - z_fo[z_i][55]) * z_fnum)); strcat(b7_ln, b7_tmp); sprintf(b7_tmp, "%15.6e", 1.0*((z_fo[z_i][21] - z_fo[z_i][56]) * z_fnum)); strcat(b7_ln, b7_tmp); sprintf(b7_tmp, "%15.6e", 1.0*((z_fo[z_i][22] - z_fo[z_i][57]) * z_fnum)); strcat(b7_ln, b7_tmp); b7_out();
+			strcat(b7_ln, "   figuring   "); sprintf(b7_tmp, "%15.6e", 1.0*(z_fo[z_i][55] * z_fnum)); strcat(b7_ln, b7_tmp); sprintf(b7_tmp, "%15.6e", 1.0*(z_fo[z_i][56] * z_fnum)); strcat(b7_ln, b7_tmp); sprintf(b7_tmp, "%15.6e", 1.0*(z_fo[z_i][57] * z_fnum)); strcat(b7_ln, b7_tmp); b7_out();
+			strcat(b7_ln, "   induced    "); sprintf(b7_tmp, "%15.6e", 1.0*((z_fo[z_i][40] - z_fo[z_i][20]) * z_fnum)); strcat(b7_ln, b7_tmp); sprintf(b7_tmp, "%15.6e", 1.0*((z_fo[z_i][23] - z_fo[z_i][21]) * z_fnum)); strcat(b7_ln, b7_tmp); sprintf(b7_tmp, "%15.6e", 1.0*((z_fo[z_i][24] - z_fo[z_i][22]) * z_fnum)); strcat(b7_ln, b7_tmp); b7_out();
+			strcat(b7_ln, "   TOTAL      "); sprintf(b7_tmp, "%15.6e", 1.0*(z_fo[z_i][40] * z_fnum)); strcat(b7_ln, b7_tmp); sprintf(b7_tmp, "%15.6e", 1.0*(z_fo[z_i][23] * z_fnum)); strcat(b7_ln, b7_tmp); sprintf(b7_tmp, "%15.6e", 1.0*(z_fo[z_i][24] * z_fnum)); strcat(b7_ln, b7_tmp); b7_out();
+		}
+		strcat(b7_ln, " "); b7_out();
+		strcat(b7_ln, "Induced share of the fifth order carried by each surface."); b7_out();
+		strcat(b7_ln, " "); b7_out();
+		strcat(b7_ln, " Surf    induced/total   what it means"); b7_out();
+		for (z_i = 1; z_i <= z_nsm; z_i = z_i + (1))
+		{
+			z_uin = 0;
+			z_utt = 0;
+			for (z_uj = 10; z_uj <= 22; z_uj = z_uj + (1))
+			{
+				z_umt = z_fo[z_i][z_uj + 20];
+				if (z_uj == 21) { z_umt = z_fo[z_i][23]; }
+				if (z_uj == 22) { z_umt = z_fo[z_i][24]; }
+				z_uin = z_uin + fabs(z_umt - z_fo[z_i][z_uj]);
+				z_utt = z_utt + fabs(z_umt);
+			}
+			z_ufr = 0;
+			if (z_utt > 0) { z_ufr = z_uin / z_utt; }
+			strcpy(z_unot, "   mixed");
+			if (z_ufr < 0.1)
+			{
+				strcpy(z_unot, "   its own doing - the fault, if there is one, is here");
+			}
+			if (z_ufr > 0.9)
+			{
+				strcpy(z_unot, "   mostly induced - look upstream");
+			}
+			if (z_ufr > 1.1)
+			{
+				strcpy(z_unot, "   induced exceeds the total - the two are cancelling here");
+			}
+			sprintf(b7_tmp, "%5.0f", 1.0*(z_i)); strcat(b7_ln, b7_tmp);
+			sprintf(b7_tmp, "%12.4f", 1.0*(z_ufr)); strcat(b7_ln, b7_tmp); strcat(b7_ln, z_unot); b7_out();
+		}
+		strcat(b7_ln, " "); b7_out();
+	}
+	z_s_pmk();
+	for (z_i = 1; z_i <= z_nsm; z_i = z_i + (1))
+	{
+		for (z_j = 1; z_j <= 112; z_j = z_j + (1))
+		{
+			z_pc[z_i][z_j] = 0;
+		}
+	}
+	return (0);
+}
+
+static int
+z_part5()
+{
+	for (z_i = 1; z_i <= z_nsm; z_i = z_i + (1))
+	{
+		if (z_vfm[z_i][6] == 1)
+		{
+			z_sfk = 0;
+			z_nb = b7_ns[z_i - 1];
+			z_na = b7_ns[z_i];
+			if (fabs(z_na) < z_eps) { z_na = 1; }
+			z_sfk = z_nb / z_na;
+			z_conic = z_vfm[z_i][2];
+			z_aterm = z_vfm[z_i][3];
+			z_bterm = z_vfm[z_i][4];
+			z_cterm = z_vfm[z_i][5];
+			z_cv = z_vfm[z_i][1];
+			z_cv2 = z_cv * z_cv;
+			z_cv3 = z_cv2 * z_cv;
+			z_c1 = 8 * z_aterm + z_conic * z_cv3;
+			z_c2 = 12 * z_bterm + 0.75 * z_cv2 * (z_cv3 * z_conic * (z_conic + 2) - 2 * z_c1);
+			z_tmp = z_cv3 * z_conic * (z_conic * z_conic + 3 * z_conic + 3) - 3 * z_c1;
+			z_tmp = z_cv2 * (5 * z_cv2 * z_tmp - 12 * z_c2);
+			z_tmp = (-6 * z_cv * z_c1 * z_c1 + z_tmp) / 8;
+			z_c3 = 16 * z_cterm + z_tmp;
+			z_f2s = z_efl * z_efl;
+			z_f3s = z_f2s * z_efl;
+			z_sfc1 = 0.5 * z_c1 * z_f3s;
+			z_sfc2 = 0.5 * z_c2 * z_f3s * z_f2s;
+			z_sfc3 = 0.5 * z_c3 * z_f3s * z_f2s * z_f2s;
+			z_sfc0 = z_cv * z_efl;
+			z_pcf[z_i][1] = z_sfc1;
+			z_pcf[z_i][2] = z_sfc2;
+			z_pcf[z_i][3] = z_sfc3;
+			z_sa1 = z_sfc1;
+			z_sa2 = z_sfc2;
+			z_sa3 = z_sfc3;
+			z_s_psurf();
+			z_s_pcub3();
+			for (z_j = 1; z_j <= 10; z_j = z_j + (1))
+			{
+				z_pc[z_i][z_j] = 16 * z_cub[1][z_j];
+			}
+			z_s_pcub4();
+			for (z_j = 1; z_j <= 6; z_j = z_j + (1))
+			{
+				z_pc[z_i][20 + z_j] = 16 * z_cub[1][z_j];
+			}
+			z_ga = 7;
+			z_s_pcubs();
+			for (z_j = 1; z_j <= 10; z_j = z_j + (1))
+			{
+				z_pc[z_i][32 + z_j] = z_cub[1][z_j];
+			}
+			z_ga = 6;
+			z_gb = 1;
+			z_gc = 20;
+			z_s_pmul();
+			z_ga = 20;
+			z_s_pcubs();
+			for (z_j = 1; z_j <= 10; z_j = z_j + (1))
+			{
+				z_pc[z_i][42 + z_j] = z_cub[1][z_j];
+			}
+			z_ga = 6;
+			z_gb = 8;
+			z_gc = 20;
+			z_s_pmul();
+			z_ga = 20;
+			z_s_pcubs();
+			for (z_j = 1; z_j <= 10; z_j = z_j + (1))
+			{
+				z_pc[z_i][52 + z_j] = z_cub[1][z_j];
+			}
+			z_ga = 5;
+			z_gb = 2;
+			z_gc = 20;
+			z_s_pmul();
+			z_ga = 20;
+			z_s_pcubs();
+			for (z_j = 1; z_j <= 10; z_j = z_j + (1))
+			{
+				z_pc[z_i][62 + z_j] = z_cub[1][z_j];
+			}
+			z_ga = 8;
+			z_gb = 1;
+			z_gc = 21;
+			z_s_pmul();
+			for (z_j = 1; z_j <= 64; z_j = z_j + (1))
+			{
+				z_pw[22][z_j] = z_pw[21][z_j] + z_pw[9][z_j];
+			}
+			z_ga = 5;
+			z_gb = 22;
+			z_gc = 20;
+			z_s_pmul();
+			z_ga = 20;
+			z_s_pcubs();
+			for (z_j = 1; z_j <= 10; z_j = z_j + (1))
+			{
+				z_pc[z_i][72 + z_j] = z_cub[1][z_j];
+			}
+			z_ga = 2;
+			z_s_pquad();
+			for (z_j = 1; z_j <= 6; z_j = z_j + (1))
+			{
+				z_pc[z_i][82 + z_j] = z_cub[1][z_j];
+			}
+			z_ga = 22;
+			z_s_pquad();
+			for (z_j = 1; z_j <= 6; z_j = z_j + (1))
+			{
+				z_pc[z_i][88 + z_j] = z_cub[1][z_j];
+			}
+			z_sa1 = 0;
+			z_sa2 = 0;
+			z_sa3 = 0;
+			z_s_psurf();
+			z_s_pcub3();
+			for (z_j = 1; z_j <= 10; z_j = z_j + (1))
+			{
+				z_pc[z_i][10 + z_j] = 16 * z_cub[1][z_j];
+			}
+			z_s_pcub4();
+			for (z_j = 1; z_j <= 6; z_j = z_j + (1))
+			{
+				z_pc[z_i][26 + z_j] = 16 * z_cub[1][z_j];
+			}
+			z_ga = 2;
+			z_s_pquad();
+			for (z_j = 1; z_j <= 6; z_j = z_j + (1))
+			{
+				z_pc[z_i][94 + z_j] = z_cub[1][z_j];
+			}
+			z_ga = 8;
+			z_gb = 1;
+			z_gc = 21;
+			z_s_pmul();
+			for (z_j = 1; z_j <= 64; z_j = z_j + (1))
+			{
+				z_pw[22][z_j] = z_pw[21][z_j] + z_pw[9][z_j];
+			}
+			z_ga = 22;
+			z_s_pquad();
+			for (z_j = 1; z_j <= 6; z_j = z_j + (1))
+			{
+				z_pc[z_i][100 + z_j] = z_cub[1][z_j];
+			}
+		}
+	}
+	for (z_i = 1; z_i <= 4 * z_nsm + 14; z_i = z_i + (1))
+	{
+		for (z_j = 1; z_j <= 8; z_j = z_j + (1))
+		{
+			z_ai[z_i][z_j] = 0;
+		}
+	}
+	z_nruns = 1;
+	if (z_anyfig == 1) { z_nruns = 4; }
+	z_flatbad = 0;
+	for (z_grun = 1; z_grun <= z_nruns; z_grun = z_grun + (1))
+	{
+		z_gdual = 0;
+		if (z_grun > 2) { z_gdual = 1; }
+		z_gfig = 0;
+		if (z_grun == 2) { z_gfig = 1; }
+		if (z_grun == 4) { z_gfig = 1; }
+		if (z_gfig == 1)
+		{
+			z_s_bridge();
+		}
+		z_s_tablei();
+		z_s_tablei2();
+	}
+	if (z_flatbad == 1)
+	{
+		strcat(b7_ln, " "); b7_out();
+		strcat(b7_ln, "DECLINED. A figured surface is flat and faces collimated light, so the"); b7_out();
+		strcat(b7_ln, "marginal incidence is zero and the incidence ratio q is infinite. The"); b7_out();
+		strcat(b7_ln, "finite coefficients arrive there only after terms carrying different powers"); b7_out();
+		strcat(b7_ln, "of q cancel, which needs series arithmetic this macro does not have. Bend"); b7_out();
+		strcat(b7_ln, "the surface and it is exact again. The third and fifth orders above are"); b7_out();
+		strcat(b7_ln, "unaffected by this and stand."); b7_out();
+		z_stop = 1; return (0);
+	}
+	if (z_dbg == 1)
+	{
+		strcat(b7_ln, " "); b7_out();
+		strcat(b7_ln, "Table I entries for this lens, the unfigured pass. The entry numbers are"); b7_out();
+		strcat(b7_ln, "Buchdahl's own, and BUCH7 prints the same table in the same order."); b7_out();
+		for (z_j = 1; z_j <= 155; z_j = z_j + (1))
+		{
+			strcat(b7_ln, "t "); sprintf(b7_tmp, "%4.0f", 1.0*(z_j)); strcat(b7_ln, b7_tmp);
+			for (z_i = 1; z_i <= z_nsm; z_i = z_i + (1))
+			{
+				sprintf(b7_tmp, "%20.9e", 1.0*(z_tt[z_i + 1][z_j])); strcat(b7_ln, b7_tmp);
+			}
+			strcat(b7_ln, " "); b7_out();
+		}
+	}
+	return (0);
+}
+
+static int
+z_part6()
+{
+	for (z_k = 1; z_k <= 10; z_k = z_k + (1))
+	{
+		z_po[9][z_k] = 0;
+		z_po[10][z_k] = 0;
+	}
+	if (z_anyfig == 0)
+	{
+		z_sqf = 2;
+		for (z_i = 1; z_i <= z_nsm; z_i = z_i + (1))
+		{
+			z_psb = 1 + z_i;
+			z_pscar = z_tt[z_psb][6];
+			z_s_pass();
+			for (z_k = 1; z_k <= 10; z_k = z_k + (1))
+			{
+				z_po[9][z_k] = z_po[9][z_k] + z_po[1][z_k];
+				z_po[10][z_k] = z_po[10][z_k] + z_po[2][z_k];
+				z_pt[z_i][z_k] = z_po[1][z_k];
+				z_pt[z_i][10 + z_k] = z_po[2][z_k];
+			}
+		}
+	}
+	else
+	{
+		z_tdg = z_nsm + 3;
+		z_tddg = 3 * (z_nsm + 2) + 1;
+		z_sqf = z_tdg + 1;
+		for (z_i = 1; z_i <= z_nsm; z_i = z_i + (1))
+		{
+			z_tdb = z_tdg + z_i;
+			z_tdd = z_tddg + z_i;
+			for (z_k = 1; z_k <= 9; z_k = z_k + (1))
+			{
+				z_sv[1][z_k] = z_tt[z_tdb][24 + z_k];
+			}
+			for (z_k = 1; z_k <= 20; z_k = z_k + (1))
+			{
+				z_sv[1][9 + z_k] = z_tt[z_tdb][100 + z_k];
+			}
+			z_sv[2][1] = z_tt[z_tdb][10];
+			z_sv[2][2] = z_tt[z_tdb][13];
+			z_sv[2][3] = z_tt[z_tdb][40];
+			z_sv[2][4] = z_tt[z_tdb][38];
+			z_sv[2][5] = z_tt[z_tdb][44];
+			z_sv[2][6] = z_tt[z_tdb][50];
+			z_sv[2][7] = z_tt[z_tdb][54];
+			z_sv[2][8] = z_tt[z_tdb][59];
+			z_sv[2][9] = z_tt[z_tdb][65];
+			z_sv[2][10] = z_tt[z_tdb][45];
+			z_sv[2][11] = z_tt[z_tdb][51];
+			z_sv[2][12] = z_tt[z_tdb][55];
+			z_sv[2][13] = z_tt[z_tdb][61];
+			z_sv[2][14] = z_tt[z_tdb][66];
+			for (z_k = 1; z_k <= 10; z_k = z_k + (1))
+			{
+				z_sv[3][z_k] = z_tt[z_tdb][120 + z_k];
+			}
+			z_fmb = z_tdb;
+			z_fmd = z_tdd;
+			z_fmc = 1;
+			z_s_fam();
+			z_tzb = z_tdb;
+			z_s_tdzero();
+			z_psb = z_tdb;
+			z_pscar = z_rv[z_tdb][1];
+			z_s_pass();
+			for (z_k = 1; z_k <= 10; z_k = z_k + (1))
+			{
+				z_po[3][z_k] = z_po[1][z_k];
+				z_po[4][z_k] = z_po[2][z_k];
+			}
+			z_fmc = 0;
+			z_s_fam();
+			z_tt[z_tdb][10] = z_rv[z_tdb][2];
+			z_tt[z_tdb][13] = z_rv[z_tdb][4];
+			z_tt[z_tdb][38] = z_rv[z_tdb][22] + z_rv[z_tdb][34];
+			z_tt[z_tdb][44] = z_rv[z_tdb][23] + z_rv[z_tdb][35];
+			z_tt[z_tdb][50] = z_rv[z_tdb][24] + z_rv[z_tdb][36];
+			z_tt[z_tdb][54] = z_rv[z_tdb][25] + z_rv[z_tdb][37];
+			z_tt[z_tdb][59] = z_rv[z_tdb][26] + z_rv[z_tdb][38];
+			z_tt[z_tdb][65] = z_rv[z_tdb][27] + z_rv[z_tdb][39];
+			z_tt[z_tdb][45] = z_rv[z_tdb][46] + z_rv[z_tdb][35];
+			z_tt[z_tdb][51] = z_rv[z_tdb][47] + z_rv[z_tdb][36];
+			z_tt[z_tdb][55] = z_rv[z_tdb][48] + z_rv[z_tdb][37];
+			z_tt[z_tdb][61] = z_rv[z_tdb][49] + z_rv[z_tdb][38];
+			z_tt[z_tdb][66] = z_rv[z_tdb][50] + z_rv[z_tdb][39];
+			for (z_k = 1; z_k <= 10; z_k = z_k + (1))
+			{
+				z_tt[z_tdb][120 + z_k] = z_rv[z_tdb][55 + z_k];
+			}
+			z_tt[z_tdb][40] = z_tt[z_tdb][38] + 2 * z_tt[z_tdb][10] * z_tt[z_tdb][25];
+			z_psb = z_tdb;
+			z_pscar = z_tt[z_tdb][6];
+			z_s_pass();
+			for (z_k = 1; z_k <= 10; z_k = z_k + (1))
+			{
+				z_po[5][z_k] = z_po[1][z_k];
+				z_po[6][z_k] = z_po[2][z_k];
+			}
+			for (z_k = 1; z_k <= 10; z_k = z_k + (1))
+			{
+				z_sv[4][z_k] = z_tt[z_tdb][120 + z_k];
+			}
+			z_sv[5][1] = z_tt[z_tdb][134];
+			z_sv[5][2] = z_tt[z_tdb][136];
+			z_sv[5][3] = z_tt[z_tdb][138];
+			z_sv[5][4] = z_tt[z_tdb][140];
+			z_sv[5][5] = z_tt[z_tdb][141];
+			z_fmc = 1;
+			z_s_fam();
+			z_tt[z_tdb][10] = z_rv[z_tdb][3];
+			z_tt[z_tdb][13] = z_rv[z_tdb][5];
+			z_tt[z_tdb][38] = z_rv[z_tdb][28] - z_rv[z_tdb][34];
+			z_tt[z_tdb][44] = z_rv[z_tdb][29] - z_rv[z_tdb][35];
+			z_tt[z_tdb][50] = z_rv[z_tdb][30] - z_rv[z_tdb][36];
+			z_tt[z_tdb][54] = z_rv[z_tdb][31] - z_rv[z_tdb][37];
+			z_tt[z_tdb][59] = z_rv[z_tdb][32] - z_rv[z_tdb][38];
+			z_tt[z_tdb][65] = z_rv[z_tdb][33] - z_rv[z_tdb][39];
+			z_tt[z_tdb][45] = z_rv[z_tdb][51] - z_rv[z_tdb][35];
+			z_tt[z_tdb][51] = z_rv[z_tdb][52] - z_rv[z_tdb][36];
+			z_tt[z_tdb][55] = z_rv[z_tdb][53] - z_rv[z_tdb][37];
+			z_tt[z_tdb][61] = z_rv[z_tdb][54] - z_rv[z_tdb][38];
+			z_tt[z_tdb][66] = z_rv[z_tdb][55] - z_rv[z_tdb][39];
+			for (z_k = 1; z_k <= 10; z_k = z_k + (1))
+			{
+				z_tt[z_tdb][120 + z_k] = z_rv[z_tdb][65 + z_k];
+			}
+			z_tt[z_tdb][40] = z_tt[z_tdb][38] + 2 * z_tt[z_tdb][10] * z_tt[z_tdb][25];
+			z_psb = z_tdb;
+			z_pscar = z_rv[z_tdb][1];
+			z_s_pass();
+			for (z_k = 1; z_k <= 10; z_k = z_k + (1))
+			{
+				z_po[9][z_k] = z_po[9][z_k] + z_po[5][z_k] + z_po[1][z_k] - z_po[3][z_k];
+				z_po[10][z_k] = z_po[10][z_k] + z_po[6][z_k] + z_po[2][z_k] - z_po[4][z_k];
+				z_pt[z_i][z_k] = z_po[5][z_k] + z_po[1][z_k] - z_po[3][z_k];
+				z_pt[z_i][10 + z_k] = z_po[6][z_k] + z_po[2][z_k] - z_po[4][z_k];
+			}
+			if (z_dbg == 1)
+			{
+				strcat(b7_ln, " "); b7_out();
+				strcat(b7_ln, "Surface "); sprintf(b7_tmp, "%3.0f", 1.0*(z_i)); strcat(b7_ln, b7_tmp); strcat(b7_ln, " - hat, then check less its residue:"); b7_out();
+				strcat(b7_ln, "   hat  "); sprintf(b7_tmp, "%15.6e", 1.0*(z_po[5][1])); strcat(b7_ln, b7_tmp); sprintf(b7_tmp, "%15.6e", 1.0*(z_po[5][2])); strcat(b7_ln, b7_tmp); sprintf(b7_tmp, "%15.6e", 1.0*(z_po[5][3])); strcat(b7_ln, b7_tmp); sprintf(b7_tmp, "%15.6e", 1.0*(z_po[5][4])); strcat(b7_ln, b7_tmp); sprintf(b7_tmp, "%15.6e", 1.0*(z_po[5][5])); strcat(b7_ln, b7_tmp); b7_out();
+				strcat(b7_ln, "        "); sprintf(b7_tmp, "%15.6e", 1.0*(z_po[5][6])); strcat(b7_ln, b7_tmp); sprintf(b7_tmp, "%15.6e", 1.0*(z_po[5][7])); strcat(b7_ln, b7_tmp); sprintf(b7_tmp, "%15.6e", 1.0*(z_po[5][8])); strcat(b7_ln, b7_tmp); sprintf(b7_tmp, "%15.6e", 1.0*(z_po[5][9])); strcat(b7_ln, b7_tmp); sprintf(b7_tmp, "%15.6e", 1.0*(z_po[5][10])); strcat(b7_ln, b7_tmp); b7_out();
+				strcat(b7_ln, "   hatb "); sprintf(b7_tmp, "%15.6e", 1.0*(z_po[6][1])); strcat(b7_ln, b7_tmp); sprintf(b7_tmp, "%15.6e", 1.0*(z_po[6][2])); strcat(b7_ln, b7_tmp); sprintf(b7_tmp, "%15.6e", 1.0*(z_po[6][3])); strcat(b7_ln, b7_tmp); sprintf(b7_tmp, "%15.6e", 1.0*(z_po[6][4])); strcat(b7_ln, b7_tmp); sprintf(b7_tmp, "%15.6e", 1.0*(z_po[6][5])); strcat(b7_ln, b7_tmp); b7_out();
+				strcat(b7_ln, "        "); sprintf(b7_tmp, "%15.6e", 1.0*(z_po[6][6])); strcat(b7_ln, b7_tmp); sprintf(b7_tmp, "%15.6e", 1.0*(z_po[6][7])); strcat(b7_ln, b7_tmp); sprintf(b7_tmp, "%15.6e", 1.0*(z_po[6][8])); strcat(b7_ln, b7_tmp); sprintf(b7_tmp, "%15.6e", 1.0*(z_po[6][9])); strcat(b7_ln, b7_tmp); sprintf(b7_tmp, "%15.6e", 1.0*(z_po[6][10])); strcat(b7_ln, b7_tmp); b7_out();
+				strcat(b7_ln, "   chk  "); sprintf(b7_tmp, "%15.6e", 1.0*(z_po[1][1] - z_po[3][1])); strcat(b7_ln, b7_tmp); sprintf(b7_tmp, "%15.6e", 1.0*(z_po[1][2] - z_po[3][2])); strcat(b7_ln, b7_tmp); sprintf(b7_tmp, "%15.6e", 1.0*(z_po[1][3] - z_po[3][3])); strcat(b7_ln, b7_tmp); sprintf(b7_tmp, "%15.6e", 1.0*(z_po[1][4] - z_po[3][4])); strcat(b7_ln, b7_tmp); sprintf(b7_tmp, "%15.6e", 1.0*(z_po[1][5] - z_po[3][5])); strcat(b7_ln, b7_tmp); b7_out();
+				strcat(b7_ln, "        "); sprintf(b7_tmp, "%15.6e", 1.0*(z_po[1][6] - z_po[3][6])); strcat(b7_ln, b7_tmp); sprintf(b7_tmp, "%15.6e", 1.0*(z_po[1][7] - z_po[3][7])); strcat(b7_ln, b7_tmp); sprintf(b7_tmp, "%15.6e", 1.0*(z_po[1][8] - z_po[3][8])); strcat(b7_ln, b7_tmp); sprintf(b7_tmp, "%15.6e", 1.0*(z_po[1][9] - z_po[3][9])); strcat(b7_ln, b7_tmp); sprintf(b7_tmp, "%15.6e", 1.0*(z_po[1][10] - z_po[3][10])); strcat(b7_ln, b7_tmp); b7_out();
+				strcat(b7_ln, "   chkb "); sprintf(b7_tmp, "%15.6e", 1.0*(z_po[2][1] - z_po[4][1])); strcat(b7_ln, b7_tmp); sprintf(b7_tmp, "%15.6e", 1.0*(z_po[2][2] - z_po[4][2])); strcat(b7_ln, b7_tmp); sprintf(b7_tmp, "%15.6e", 1.0*(z_po[2][3] - z_po[4][3])); strcat(b7_ln, b7_tmp); sprintf(b7_tmp, "%15.6e", 1.0*(z_po[2][4] - z_po[4][4])); strcat(b7_ln, b7_tmp); sprintf(b7_tmp, "%15.6e", 1.0*(z_po[2][5] - z_po[4][5])); strcat(b7_ln, b7_tmp); b7_out();
+				strcat(b7_ln, "        "); sprintf(b7_tmp, "%15.6e", 1.0*(z_po[2][6] - z_po[4][6])); strcat(b7_ln, b7_tmp); sprintf(b7_tmp, "%15.6e", 1.0*(z_po[2][7] - z_po[4][7])); strcat(b7_ln, b7_tmp); sprintf(b7_tmp, "%15.6e", 1.0*(z_po[2][8] - z_po[4][8])); strcat(b7_ln, b7_tmp); sprintf(b7_tmp, "%15.6e", 1.0*(z_po[2][9] - z_po[4][9])); strcat(b7_ln, b7_tmp); sprintf(b7_tmp, "%15.6e", 1.0*(z_po[2][10] - z_po[4][10])); strcat(b7_ln, b7_tmp); b7_out();
+				strcat(b7_ln, "   z hat"); sprintf(b7_tmp, "%15.6e", 1.0*(z_sv[4][1])); strcat(b7_ln, b7_tmp); sprintf(b7_tmp, "%15.6e", 1.0*(z_sv[4][2])); strcat(b7_ln, b7_tmp); sprintf(b7_tmp, "%15.6e", 1.0*(z_sv[4][3])); strcat(b7_ln, b7_tmp); sprintf(b7_tmp, "%15.6e", 1.0*(z_sv[4][4])); strcat(b7_ln, b7_tmp); sprintf(b7_tmp, "%15.6e", 1.0*(z_sv[4][5])); strcat(b7_ln, b7_tmp); b7_out();
+				strcat(b7_ln, "        "); sprintf(b7_tmp, "%15.6e", 1.0*(z_sv[4][6])); strcat(b7_ln, b7_tmp); sprintf(b7_tmp, "%15.6e", 1.0*(z_sv[4][7])); strcat(b7_ln, b7_tmp); sprintf(b7_tmp, "%15.6e", 1.0*(z_sv[4][8])); strcat(b7_ln, b7_tmp); sprintf(b7_tmp, "%15.6e", 1.0*(z_sv[4][9])); strcat(b7_ln, b7_tmp); sprintf(b7_tmp, "%15.6e", 1.0*(z_sv[4][10])); strcat(b7_ln, b7_tmp); b7_out();
+				strcat(b7_ln, "   chain"); sprintf(b7_tmp, "%15.6e", 1.0*(z_sv[5][1])); strcat(b7_ln, b7_tmp); sprintf(b7_tmp, "%15.6e", 1.0*(z_sv[5][2])); strcat(b7_ln, b7_tmp); sprintf(b7_tmp, "%15.6e", 1.0*(z_sv[5][3])); strcat(b7_ln, b7_tmp); sprintf(b7_tmp, "%15.6e", 1.0*(z_sv[5][4])); strcat(b7_ln, b7_tmp); sprintf(b7_tmp, "%15.6e", 1.0*(z_sv[5][5])); strcat(b7_ln, b7_tmp); b7_out();
+			}
+			for (z_k = 1; z_k <= 9; z_k = z_k + (1))
+			{
+				z_tt[z_tdb][24 + z_k] = z_sv[1][z_k];
+			}
+			for (z_k = 1; z_k <= 20; z_k = z_k + (1))
+			{
+				z_tt[z_tdb][100 + z_k] = z_sv[1][9 + z_k];
+			}
+			z_tt[z_tdb][10] = z_sv[2][1];
+			z_tt[z_tdb][13] = z_sv[2][2];
+			z_tt[z_tdb][40] = z_sv[2][3];
+			z_tt[z_tdb][38] = z_sv[2][4];
+			z_tt[z_tdb][44] = z_sv[2][5];
+			z_tt[z_tdb][50] = z_sv[2][6];
+			z_tt[z_tdb][54] = z_sv[2][7];
+			z_tt[z_tdb][59] = z_sv[2][8];
+			z_tt[z_tdb][65] = z_sv[2][9];
+			z_tt[z_tdb][45] = z_sv[2][10];
+			z_tt[z_tdb][51] = z_sv[2][11];
+			z_tt[z_tdb][55] = z_sv[2][12];
+			z_tt[z_tdb][61] = z_sv[2][13];
+			z_tt[z_tdb][66] = z_sv[2][14];
+			for (z_k = 1; z_k <= 10; z_k = z_k + (1))
+			{
+				z_tt[z_tdb][120 + z_k] = z_sv[3][z_k];
+			}
+		}
+	}
+	if (z_chk == 1)
+	{
+		strcat(b7_ln, " "); b7_out();
+		strcat(b7_ln, "The ten tertiary totals and their barred partners, unconverted."); b7_out();
+		strcat(b7_ln, "   T1  "); sprintf(b7_tmp, "%15.6e", 1.0*(z_po[9][1])); strcat(b7_ln, b7_tmp); strcat(b7_ln, "  T2  "); sprintf(b7_tmp, "%15.6e", 1.0*(z_po[9][2])); strcat(b7_ln, b7_tmp); strcat(b7_ln, "  T3  "); sprintf(b7_tmp, "%15.6e", 1.0*(z_po[9][3])); strcat(b7_ln, b7_tmp); b7_out();
+		strcat(b7_ln, "   T4  "); sprintf(b7_tmp, "%15.6e", 1.0*(z_po[9][4])); strcat(b7_ln, b7_tmp); strcat(b7_ln, "  T5  "); sprintf(b7_tmp, "%15.6e", 1.0*(z_po[9][5])); strcat(b7_ln, b7_tmp); strcat(b7_ln, "  T6  "); sprintf(b7_tmp, "%15.6e", 1.0*(z_po[9][6])); strcat(b7_ln, b7_tmp); b7_out();
+		strcat(b7_ln, "   T7  "); sprintf(b7_tmp, "%15.6e", 1.0*(z_po[9][7])); strcat(b7_ln, b7_tmp); strcat(b7_ln, "  T8  "); sprintf(b7_tmp, "%15.6e", 1.0*(z_po[9][8])); strcat(b7_ln, b7_tmp); strcat(b7_ln, "  T9  "); sprintf(b7_tmp, "%15.6e", 1.0*(z_po[9][9])); strcat(b7_ln, b7_tmp); b7_out();
+		strcat(b7_ln, "   T10 "); sprintf(b7_tmp, "%15.6e", 1.0*(z_po[9][10])); strcat(b7_ln, b7_tmp); b7_out();
+		strcat(b7_ln, "   Tb1 "); sprintf(b7_tmp, "%15.6e", 1.0*(z_po[10][1])); strcat(b7_ln, b7_tmp); strcat(b7_ln, "  Tb2 "); sprintf(b7_tmp, "%15.6e", 1.0*(z_po[10][2])); strcat(b7_ln, b7_tmp); strcat(b7_ln, "  Tb3 "); sprintf(b7_tmp, "%15.6e", 1.0*(z_po[10][3])); strcat(b7_ln, b7_tmp); b7_out();
+		strcat(b7_ln, "   Tb4 "); sprintf(b7_tmp, "%15.6e", 1.0*(z_po[10][4])); strcat(b7_ln, b7_tmp); strcat(b7_ln, "  Tb5 "); sprintf(b7_tmp, "%15.6e", 1.0*(z_po[10][5])); strcat(b7_ln, b7_tmp); strcat(b7_ln, "  Tb6 "); sprintf(b7_tmp, "%15.6e", 1.0*(z_po[10][6])); strcat(b7_ln, b7_tmp); b7_out();
+		strcat(b7_ln, "   Tb7 "); sprintf(b7_tmp, "%15.6e", 1.0*(z_po[10][7])); strcat(b7_ln, b7_tmp); strcat(b7_ln, "  Tb8 "); sprintf(b7_tmp, "%15.6e", 1.0*(z_po[10][8])); strcat(b7_ln, b7_tmp); strcat(b7_ln, "  Tb9 "); sprintf(b7_tmp, "%15.6e", 1.0*(z_po[10][9])); strcat(b7_ln, b7_tmp); b7_out();
+		strcat(b7_ln, "   Tb10"); sprintf(b7_tmp, "%15.6e", 1.0*(z_po[10][10])); strcat(b7_ln, b7_tmp); b7_out();
+	}
+	z_vec4[1] = z_po[9][1];
+	z_vec4[2] = z_po[10][1] + z_po[9][2] / 2;
+	z_vec4[3] = z_po[9][2] / 2;
+	z_vec4[4] = z_po[10][2] + z_po[9][3];
+	z_vec4[5] = z_po[9][3];
+	return (0);
+}
+
+static int
+z_part7()
+{
+	z_vec4[6] = z_po[9][4];
+	z_vec4[7] = z_po[10][3] + z_po[10][4] / 2 + z_po[9][5] / 2 + 3 * z_po[9][7] / 8;
+	z_vec4[8] = (z_po[10][4] + z_po[9][5] + z_po[9][7]) / 2;
+	z_vec4[9] = z_po[9][5] / 2 + z_po[9][7] / 4;
+	z_vec4[10] = z_po[9][7] / 8;
+	z_vec4[11] = z_po[10][5] + z_po[9][6];
+	z_vec4[12] = z_po[10][7] + z_po[9][8];
+	z_vec4[13] = z_po[9][6];
+	z_vec4[14] = z_po[9][8];
+	z_vec4[15] = z_po[10][6] + z_po[10][8] / 2 + z_po[9][9] / 2;
+	z_vec4[16] = (z_po[10][8] + z_po[9][9]) / 2;
+	z_vec4[17] = z_po[9][9] / 2;
+	z_vec4[18] = z_po[10][9] + z_po[9][10];
+	z_vec4[19] = z_po[9][10];
+	z_vec4[20] = z_po[10][10];
+	z_epr = z_vec2[2] + z_epp * z_vec2[501];
+	z_um = -(z_epr / z_efl) / z_goe;
+	if (z_finite == 1)
+	{
+		z_hobj = z_vec3[2] - z_objd * z_vec3[501];
+		z_hmax = -z_hobj / z_objd;
+	}
+	else
+	{
+		z_hmax = fabs(z_vec3[501]);
+	}
+	if (fabs(z_hmax) < z_eps)
+	{
+		strcat(b7_ln, "The chief ray carries no field, so the field variable cannot be recovered."); b7_out();
+		strcat(b7_ln, "Is the field zero?"); b7_out();
+		z_stop = 1; return (0);
+	}
+	z_hmax = z_hmax * z_n0abs;
+	z_vpk = z_rv[1 + z_nsm][20];
+	if (z_anyfig == 1) { z_vpk = z_rv[z_tdg + z_nsm][20]; }
+	if (fabs(z_vpk) < z_eps)
+	{
+		strcat(b7_ln, "The p ray leaves the last surface parallel to the axis - the system is"); b7_out();
+		strcat(b7_ln, "afocal, and the seventh order cannot be put into transverse measure."); b7_out();
+		z_stop = 1; return (0);
+	}
+	z_efac = z_efl / (z_nlsig * z_vpk);
+	z_up2 = z_um * z_um;
+	z_up3 = z_up2 * z_um;
+	z_up4 = z_up3 * z_um;
+	z_up5 = z_up4 * z_um;
+	z_up6 = z_up5 * z_um;
+	z_up7 = z_up6 * z_um;
+	z_h2 = z_hmax * z_hmax;
+	z_h3 = z_h2 * z_hmax;
+	z_h4 = z_h3 * z_hmax;
+	z_h5 = z_h4 * z_hmax;
+	z_h6 = z_h5 * z_hmax;
+	z_h7 = z_h6 * z_hmax;
+	z_vec4[21] = z_efac * z_up7;
+	z_vec4[22] = z_efac * z_up6 * z_hmax;
+	z_vec4[23] = z_vec4[22];
+	z_vec4[24] = z_efac * z_up5 * z_h2;
+	z_vec4[25] = z_vec4[24];
+	z_vec4[26] = z_vec4[24];
+	z_vec4[27] = z_efac * z_up4 * z_h3;
+	z_vec4[28] = z_vec4[27];
+	z_vec4[29] = z_vec4[27];
+	z_vec4[30] = z_vec4[27];
+	z_vec4[31] = z_efac * z_up3 * z_h4;
+	z_vec4[32] = z_vec4[31];
+	z_vec4[33] = z_vec4[31];
+	z_vec4[34] = z_vec4[31];
+	z_vec4[35] = z_efac * z_up2 * z_h5;
+	z_vec4[36] = z_vec4[35];
+	z_vec4[37] = z_vec4[35];
+	z_vec4[38] = z_efac * z_um * z_h6;
+	z_vec4[39] = z_vec4[38];
+	z_vec4[40] = z_efac * z_h7;
+	for (z_k = 1; z_k <= 20; z_k = z_k + (1))
+	{
+		z_vec4[z_k] = z_vec4[z_k] * z_vec4[20 + z_k];
+	}
+	z_tau1s = z_vec4[1];
+	z_vec4[1] = z_sb7 * z_fnum;
+	strcat(b7_ln, " "); b7_out();
+	strcat(b7_ln, "Seventh order, system totals, transverse measure - Buchdahl's tau."); b7_out();
+	strcat(b7_ln, " "); b7_out();
+	strcat(b7_ln, "   tau1 "); sprintf(b7_tmp, "%15.6e", 1.0*(z_vec4[1])); strcat(b7_ln, b7_tmp); strcat(b7_ln, "  tau2 "); sprintf(b7_tmp, "%15.6e", 1.0*(z_vec4[2])); strcat(b7_ln, b7_tmp); strcat(b7_ln, "  tau3 "); sprintf(b7_tmp, "%15.6e", 1.0*(z_vec4[3])); strcat(b7_ln, b7_tmp); b7_out();
+	strcat(b7_ln, "   tau4 "); sprintf(b7_tmp, "%15.6e", 1.0*(z_vec4[4])); strcat(b7_ln, b7_tmp); strcat(b7_ln, "  tau5 "); sprintf(b7_tmp, "%15.6e", 1.0*(z_vec4[5])); strcat(b7_ln, b7_tmp); strcat(b7_ln, "  tau6 "); sprintf(b7_tmp, "%15.6e", 1.0*(z_vec4[6])); strcat(b7_ln, b7_tmp); b7_out();
+	strcat(b7_ln, "   tau7 "); sprintf(b7_tmp, "%15.6e", 1.0*(z_vec4[7])); strcat(b7_ln, b7_tmp); strcat(b7_ln, "  tau8 "); sprintf(b7_tmp, "%15.6e", 1.0*(z_vec4[8])); strcat(b7_ln, b7_tmp); strcat(b7_ln, "  tau9 "); sprintf(b7_tmp, "%15.6e", 1.0*(z_vec4[9])); strcat(b7_ln, b7_tmp); b7_out();
+	strcat(b7_ln, "   tau10"); sprintf(b7_tmp, "%15.6e", 1.0*(z_vec4[10])); strcat(b7_ln, b7_tmp); strcat(b7_ln, "  tau11"); sprintf(b7_tmp, "%15.6e", 1.0*(z_vec4[11])); strcat(b7_ln, b7_tmp); strcat(b7_ln, "  tau12"); sprintf(b7_tmp, "%15.6e", 1.0*(z_vec4[12])); strcat(b7_ln, b7_tmp); b7_out();
+	strcat(b7_ln, "   tau13"); sprintf(b7_tmp, "%15.6e", 1.0*(z_vec4[13])); strcat(b7_ln, b7_tmp); strcat(b7_ln, "  tau14"); sprintf(b7_tmp, "%15.6e", 1.0*(z_vec4[14])); strcat(b7_ln, b7_tmp); strcat(b7_ln, "  tau15"); sprintf(b7_tmp, "%15.6e", 1.0*(z_vec4[15])); strcat(b7_ln, b7_tmp); b7_out();
+	strcat(b7_ln, "   tau16"); sprintf(b7_tmp, "%15.6e", 1.0*(z_vec4[16])); strcat(b7_ln, b7_tmp); strcat(b7_ln, "  tau17"); sprintf(b7_tmp, "%15.6e", 1.0*(z_vec4[17])); strcat(b7_ln, b7_tmp); strcat(b7_ln, "  tau18"); sprintf(b7_tmp, "%15.6e", 1.0*(z_vec4[18])); strcat(b7_ln, b7_tmp); b7_out();
+	strcat(b7_ln, "   tau19"); sprintf(b7_tmp, "%15.6e", 1.0*(z_vec4[19])); strcat(b7_ln, b7_tmp); strcat(b7_ln, "  tau20"); sprintf(b7_tmp, "%15.6e", 1.0*(z_vec4[20])); strcat(b7_ln, b7_tmp); b7_out();
+	strcat(b7_ln, " "); b7_out();
+	strcat(b7_ln, "tau1 above is B7, reached through the fifth-order working. The scheme reaches"); b7_out();
+	strcat(b7_ln, "it a second time through Table I, and gets"); b7_out();
+	strcat(b7_ln, "   tau1 "); sprintf(b7_tmp, "%15.6e", 1.0*(z_tau1s)); strcat(b7_ln, b7_tmp); b7_out();
+	strcat(b7_ln, "On a lens of spheres the two agree exactly; on a figured lens they agree to"); b7_out();
+	strcat(b7_ln, "the accuracy of the arrangement, and a large disagreement is a warning."); b7_out();
+	strcat(b7_ln, " "); b7_out();
+	if (z_srf == 1)
+	{
+		for (z_i = 1; z_i <= z_nsm; z_i = z_i + (1))
+		{
+			z_tw[z_i][1] = z_pt[z_i][1];
+			z_tw[z_i][2] = z_pt[z_i][11] + z_pt[z_i][2] / 2;
+			z_tw[z_i][3] = z_pt[z_i][2] / 2;
+			z_tw[z_i][4] = z_pt[z_i][12] + z_pt[z_i][3];
+			z_tw[z_i][5] = z_pt[z_i][3];
+			z_tw[z_i][6] = z_pt[z_i][4];
+			z_tw[z_i][7] = z_pt[z_i][13] + z_pt[z_i][14] / 2 + z_pt[z_i][5] / 2 + 3 * z_pt[z_i][7] / 8;
+			z_tw[z_i][8] = (z_pt[z_i][14] + z_pt[z_i][5] + z_pt[z_i][7]) / 2;
+			z_tw[z_i][9] = z_pt[z_i][5] / 2 + z_pt[z_i][7] / 4;
+			z_tw[z_i][10] = z_pt[z_i][7] / 8;
+			z_tw[z_i][11] = z_pt[z_i][15] + z_pt[z_i][6];
+			z_tw[z_i][12] = z_pt[z_i][17] + z_pt[z_i][8];
+			z_tw[z_i][13] = z_pt[z_i][6];
+			z_tw[z_i][14] = z_pt[z_i][8];
+			z_tw[z_i][15] = z_pt[z_i][16] + z_pt[z_i][18] / 2 + z_pt[z_i][9] / 2;
+			z_tw[z_i][16] = (z_pt[z_i][18] + z_pt[z_i][9]) / 2;
+			z_tw[z_i][17] = z_pt[z_i][9] / 2;
+			z_tw[z_i][18] = z_pt[z_i][19] + z_pt[z_i][10];
+			z_tw[z_i][19] = z_pt[z_i][10];
+			z_tw[z_i][20] = z_pt[z_i][20];
+			for (z_k = 1; z_k <= 20; z_k = z_k + (1))
+			{
+				z_tw[z_i][z_k] = z_tw[z_i][z_k] * z_vec4[20 + z_k];
+			}
+			z_tw[z_i][1] = z_fo[z_i][24] * z_fnum;
+		}
+		strcat(b7_ln, " "); b7_out();
+		strcat(b7_ln, "==============================================================================="); b7_out();
+		strcat(b7_ln, "SEVENTH ORDER, SURFACE BY SURFACE - the twenty tau, transverse measure."); b7_out();
+		strcat(b7_ln, "==============================================================================="); b7_out();
+		for (z_kg = 0; z_kg <= 3; z_kg = z_kg + (1))
+		{
+			z_k1 = 5 * z_kg + 1;
+			strcat(b7_ln, " "); b7_out();
+			if (z_kg == 0)
+			{
+				strcat(b7_ln, " Surf           tau1           tau2           tau3           tau4           tau5"); b7_out();
+			}
+			if (z_kg == 1)
+			{
+				strcat(b7_ln, " Surf           tau6           tau7           tau8           tau9          tau10"); b7_out();
+			}
+			if (z_kg == 2)
+			{
+				strcat(b7_ln, " Surf          tau11          tau12          tau13          tau14          tau15"); b7_out();
+			}
+			if (z_kg == 3)
+			{
+				strcat(b7_ln, " Surf          tau16          tau17          tau18          tau19          tau20"); b7_out();
+			}
+			z_ws1 = 0;
+			z_ws2 = 0;
+			z_ws3 = 0;
+			z_ws4 = 0;
+			z_ws5 = 0;
+			for (z_i = 1; z_i <= z_nsm; z_i = z_i + (1))
+			{
+				z_ws1 = z_ws1 + z_tw[z_i][z_k1];
+				z_ws2 = z_ws2 + z_tw[z_i][z_k1 + 1];
+				z_ws3 = z_ws3 + z_tw[z_i][z_k1 + 2];
+				z_ws4 = z_ws4 + z_tw[z_i][z_k1 + 3];
+				z_ws5 = z_ws5 + z_tw[z_i][z_k1 + 4];
+				sprintf(b7_tmp, "%5.0f", 1.0*(z_i)); strcat(b7_ln, b7_tmp);
+				sprintf(b7_tmp, "%15.6e", 1.0*(z_tw[z_i][z_k1])); strcat(b7_ln, b7_tmp); sprintf(b7_tmp, "%15.6e", 1.0*(z_tw[z_i][z_k1 + 1])); strcat(b7_ln, b7_tmp); sprintf(b7_tmp, "%15.6e", 1.0*(z_tw[z_i][z_k1 + 2])); strcat(b7_ln, b7_tmp); sprintf(b7_tmp, "%15.6e", 1.0*(z_tw[z_i][z_k1 + 3])); strcat(b7_ln, b7_tmp); sprintf(b7_tmp, "%15.6e", 1.0*(z_tw[z_i][z_k1 + 4])); strcat(b7_ln, b7_tmp); b7_out();
+			}
+			strcat(b7_ln, "  SUM");
+			sprintf(b7_tmp, "%15.6e", 1.0*(z_ws1)); strcat(b7_ln, b7_tmp); sprintf(b7_tmp, "%15.6e", 1.0*(z_ws2)); strcat(b7_ln, b7_tmp); sprintf(b7_tmp, "%15.6e", 1.0*(z_ws3)); strcat(b7_ln, b7_tmp); sprintf(b7_tmp, "%15.6e", 1.0*(z_ws4)); strcat(b7_ln, b7_tmp); sprintf(b7_tmp, "%15.6e", 1.0*(z_ws5)); strcat(b7_ln, b7_tmp); b7_out();
+		}
+		strcat(b7_ln, " "); b7_out();
+		strcat(b7_ln, "The SUM rows are the twenty totals printed above. They are computed here by a"); b7_out();
+		strcat(b7_ln, "different route - summed after conversion rather than before it - so a"); b7_out();
+		strcat(b7_ln, "disagreement between them is a fault in this macro and not in your lens."); b7_out();
+		strcat(b7_ln, " "); b7_out();
+	}
+	return (0);
+}
+
+static int
+z_main()
+{
+	z_part4();
+	z_part5();
+	if (z_stop) return (0);
+	z_part6();
+	z_part7();
+	if (z_stop) return (0);
+	return (0);
+}
+
+static int
+b7_run(int k_srfarg, int k_wavarg)
+{
+	int    k_i, k_j, k_uj, k_wvn, k_badtyp, k_infobj, k_anyfig, k_anyr2, k_nmir;
+	double k_sgn, k_t0, k_epup, k_efl, k_epd, k_uobj, k_yobj, k_a_st, k_b_st, k_yA, k_lag, k_n0, k_n0abs;
+	double k_pupf, k_nlast, k_fnum, k_objd, k_iota, k_fld, k_epp, k_p0;
+	double k_vcv, k_vkk, k_va2, k_va4, k_va6, k_va8, k_vc2, k_vc3, k_vc5, k_vc7, k_vk1, k_vt2, k_vt3, k_vt4, k_vv, k_vv2, k_vv3, k_vv5, k_vv7;
+
+
+	b7_nsm = ims - 1;
+	if (b7_nsm < 1)
+	{
+		sprintf(b7_ln, "buch7_asph needs at least one optical surface between object and image.");
+		b7_out();
+		return (0);
+	}
+	if (ims + 1 > B7_MAXS)
+	{
+		sprintf(b7_ln, "buch7_asph holds at most %d surfaces.", B7_MAXS - 2);
+		b7_out();
+		return (0);
+	}
+	if (k_wavarg > 0)
+		k_wvn = k_wavarg;
+	else
+		k_wvn = +wav + 1;
+
+	// ---- surface types. Declined by name rather than by reading data that are not a
+	// conic and even terms. AG cannot reach the seventh order and is said to be dropped.
+	k_badtyp = 0;
+	for (k_i = 1; k_i <= b7_nsm; k_i++)
+	{
+		if (!(srftyp[k_i] == 0 || srftyp[k_i] == 1 || srftyp[k_i] == 4 || srftyp[k_i] == 5))
+		{
+			sprintf(b7_ln, "Surface %d is of type %d (OSLO srftyp), not a plane, sphere, conic or standard asphere.", k_i, srftyp[k_i]);
+			b7_out();
+			k_badtyp = 1;
+		}
+		else if (srftyp[k_i] == 5 && asp[k_i] != 0)
+		{
+			sprintf(b7_ln, "Surface %d carries a general polynomial asphere (OSLO asp %d), not the standard AD..AG.", k_i, asp[k_i]);
+			b7_out();
+			k_badtyp = 1;
+		}
+		if (fabs(ag[k_i]) > 0.0)
+		{
+			sprintf(b7_ln, "NOTE: surface %d carries AG, the r^10 term, which cannot reach the seventh order and takes no part.", k_i);
+			b7_out();
+		}
+	}
+	if (k_badtyp)
+	{
+		sprintf(b7_ln, "buch7_asph carries plane, spherical, conic and standard aspheric surfaces. On any other");
+		b7_out();
+		sprintf(b7_ln, "type the surface data mean something other than a conic and even terms, so it declines.");
+		b7_out();
+		return (0);
+	}
+
+	// ---- the index after each surface, signed by the mirror count: after an odd number of
+	// reflections light runs toward -z, and a negated index reproduces that exactly.
+	k_sgn = 1.0;
+	k_nmir = 0;
+	b7_ns[0] = fabs(rn[0][k_wvn]);
+	for (k_i = 1; k_i <= b7_nsm; k_i++)
+	{
+		if (gltyp[k_i] == 4)
+		{
+			k_sgn = -k_sgn;
+			k_nmir++;
+			b7_ns[k_i] = k_sgn*fabs(b7_ns[k_i - 1]);
+		}
+		else
+			b7_ns[k_i] = k_sgn*fabs(rn[k_i][k_wvn]);
+	}
+
+	// ---- the two paraxial rays, exactly as ParaxialTrace launches them
+	k_infobj = 0;
+	k_t0 = fabs(th[0]);
+	if (k_t0 >= 1e10)
+	{
+		k_infobj = 1;
+		k_t0 = 0.0;
+	}
+
+	// the entrance pupil, from two basis rays: where the ray that crosses the axis at the
+	// stop came from, measured from surface 1
+	if (ast < 1 || ast > b7_nsm)
+	{
+		sprintf(b7_ln, "No aperture stop between the object and the image.");
+		b7_out();
+		return (0);
+	}
+	b7_prop(1.0, 0.0);
+	k_a_st = b7_ya[ast];
+	k_yA = b7_ns[b7_nsm]*b7_ua[b7_nsm];
+	b7_prop(0.0, 1.0);
+	k_b_st = b7_ya[ast];
+	if (fabs(k_a_st) > 1e-15)
+		k_epup = k_b_st/k_a_st;
+	else
+		k_epup = 0.0;
+	if (fabs(k_yA) < 1e-15)
+	{
+		sprintf(b7_ln, "The system has no focal length; an afocal system is not handled.");
+		b7_out();
+		return (0);
+	}
+	k_efl = -b7_ns[0]/k_yA;
+
+	// the marginal ray: from the axial object point to the edge of the entrance pupil
+	k_epd = 2.0*(+ebr);
+	if (k_infobj)
+	{
+		k_yobj = 0.5*k_epd;
+		k_uobj = 0.0;
+	}
+	else
+	{
+		k_uobj = 0.5*k_epd/(k_t0 + k_epup);
+		k_yobj = k_uobj*k_t0;
+	}
+	b7_prop(k_yobj, k_uobj);
+	for (k_i = 0; k_i <= b7_nsm; k_i++)
+	{
+		b7_ym[k_i] = b7_ya[k_i];
+		b7_um[k_i] = b7_ua[k_i];
+	}
+
+	// the chief ray: from the edge of the field through the centre of the entrance pupil.
+	// At infinity the field is ANG; at a finite object it is the object height OBH.
+	if (k_infobj)
+	{
+		k_fld = +ang;
+		k_uobj = tan(k_fld);
+		k_yobj = -k_uobj*k_epup;
+	}
+	else
+	{
+		k_fld = fabs(+obh);
+		k_uobj = -k_fld/(k_t0 + k_epup);
+		k_yobj = k_fld + k_uobj*k_t0;
+	}
+	b7_prop(k_yobj, k_uobj);
+	for (k_i = 0; k_i <= b7_nsm; k_i++)
+	{
+		b7_yc[k_i] = b7_ya[k_i];
+		b7_uc[k_i] = b7_ua[k_i];
+	}
+
+	k_n0 = b7_ns[0];
+	k_lag = k_n0*(b7_uc[0]*b7_ym[1] - b7_um[0]*b7_yc[1]);
+	k_n0abs = fabs(k_n0);
+	if (fabs(k_lag) < 1e-10)
+	{
+		sprintf(b7_ln, "The Lagrange invariant is zero. Is the field zero, or the aperture?");
+		b7_out();
+		return (0);
+	}
+
+	k_epp = k_epup;
+	k_p0 = k_epp/k_efl;
+	k_pupf = b7_um[b7_nsm];
+	k_nlast = fabs(b7_ns[b7_nsm]);
+	k_fnum = -0.5/k_nlast/k_pupf;
+	k_objd = th[0];
+	k_iota = 0.0;
+	if (!k_infobj)
+		k_iota = -k_efl/k_objd;
+
+	// ---- the vertex form. OSLO's standard asphere has no r^2 term, so the curvature and
+	// conic are the surface's own; the r^2 fold of the macro is kept for a surface that
+	// would carry one, and is never reached here.
+	k_anyfig = 0;
+	k_anyr2 = 0;
+	for (k_i = 1; k_i <= b7_nsm; k_i++)
+	{
+		k_vcv = cv[k_i];
+		k_vkk = cc[k_i];
+		k_va2 = 0.0;
+		k_va4 = ad[k_i];
+		k_va6 = ae[k_i];
+		k_va8 = af[k_i];
+		if (fabs(k_va2) > 0.0)
+		{
+			k_anyr2 = 1;
+			k_vc2 = k_vcv*k_vcv;
+			k_vc3 = k_vc2*k_vcv;
+			k_vc5 = k_vc3*k_vc2;
+			k_vc7 = k_vc5*k_vc2;
+			k_vk1 = 1.0 + k_vkk;
+			k_vt2 = k_vk1*k_vc3/8.0 + k_va4;
+			k_vt3 = k_vk1*k_vk1*k_vc5/16.0 + k_va6;
+			k_vt4 = 5.0*k_vk1*k_vk1*k_vk1*k_vc7/128.0 + k_va8;
+			k_vv = k_vcv + 2.0*k_va2;
+			k_vv2 = k_vv*k_vv;
+			k_vv3 = k_vv2*k_vv;
+			k_vv5 = k_vv3*k_vv2;
+			k_vv7 = k_vv5*k_vv2;
+			b7_vfm[k_i][1] = k_vv;
+			b7_vfm[k_i][2] = 0.0;
+			b7_vfm[k_i][3] = k_vt2 - k_vv3/8.0;
+			b7_vfm[k_i][4] = k_vt3 - k_vv5/16.0;
+			b7_vfm[k_i][5] = k_vt4 - 5.0*k_vv7/128.0;
+		}
+		else
+		{
+			b7_vfm[k_i][1] = k_vcv;
+			b7_vfm[k_i][2] = k_vkk;
+			b7_vfm[k_i][3] = k_va4;
+			b7_vfm[k_i][4] = k_va6;
+			b7_vfm[k_i][5] = k_va8;
+		}
+		b7_vfm[k_i][6] = 0.0;
+		if (fabs(b7_vfm[k_i][2]) > 1e-14 || b7_vfm[k_i][3] != 0.0 || b7_vfm[k_i][4] != 0.0 || b7_vfm[k_i][5] != 0.0)
+		{
+			b7_vfm[k_i][6] = 1.0;
+			k_anyfig = 1;
+		}
+	}
+
+	sprintf(b7_ln, "BUCH7_ASPH (OSLO) - Buchdahl coefficients, conics and even aspheres carried");
+	b7_out();
+	sprintf(b7_ln, "Wavelength             %d (%.6f um)", k_wvn, wv[k_wvn]);
+	b7_out();
+	sprintf(b7_ln, "Effective focal length %.6f", k_efl);
+	b7_out();
+	sprintf(b7_ln, "F/number               %.6f", k_fnum);
+	b7_out();
+	sprintf(b7_ln, "Lagrange invariant     %.10g", k_lag);
+	b7_out();
+	sprintf(b7_ln, "Entrance pupil         %.6f from surface 1, radius %.6f", k_epp, 0.5*k_epd);
+	b7_out();
+	sprintf(b7_ln, "Buchdahl p             %.6f", k_p0);
+	b7_out();
+	if (k_infobj)
+	{
+		sprintf(b7_ln, "Object                 at infinity, field angle %.6f deg", k_fld*180.0/pi);
+		b7_out();
+	}
+	else
+	{
+		sprintf(b7_ln, "Object distance        %.6f, object height %.6f", k_objd, k_fld);
+		b7_out();
+		sprintf(b7_ln, "Buchdahl iota          %.6f", k_iota);
+		b7_out();
+	}
+	if (k_nmir > 0)
+	{
+		sprintf(b7_ln, "Reflections            %d", k_nmir);
+		b7_out();
+	}
+	// A lens with no field: OSLO traces its chief ray at a slope of 1e-6 instead. B, B5 and
+	// B7 do not depend on the field and are right; everything else is for that made-up field.
+	if (fabs(k_uobj) < 1e-5)
+	{
+		sprintf(b7_ln, "WARNING: the field is OSLO's minimum (chief-ray slope %.1e), not a field of", k_uobj);
+		b7_out();
+		sprintf(b7_ln, "this lens. Only B, B5 and B7 mean anything; every field-dependent coefficient");
+		b7_out();
+		sprintf(b7_ln, "below is for that minimum field, and is zero for the lens itself.");
+		b7_out();
+	}
+	if (k_anyfig == 0)
+	{
+		sprintf(b7_ln, "Nothing is figured: every figuring row below is zero.");
+		b7_out();
+	}
+	sprintf(b7_ln, " ");
+	b7_out();
+
+	// ---- the paraxial rays, so they can be set beside OSLO's own (pxt all)
+	sprintf(b7_ln, "Paraxial rays (axial: height, slope after; chief: height, slope after)");
+	b7_out();
+	sprintf(b7_ln, " Srf            PY             PU            PYC            PUC        index after");
+	b7_out();
+	for (k_i = 0; k_i <= b7_nsm; k_i++)
+	{
+		sprintf(b7_ln, "%4d %14.8f %14.8f %14.8f %14.8f %14.8f", k_i, b7_ym[k_i], b7_um[k_i], b7_yc[k_i], b7_uc[k_i], b7_ns[k_i]);
+		b7_out();
+	}
+	sprintf(b7_ln, " ");
+	b7_out();
+
+	// ==================================================================================
+	// Hand over to the macro's own arithmetic, translated statement for statement.
+	// ==================================================================================
+	z_zero();
+	z_nsm = b7_nsm;
+	z_eps = 1e-10;
+	z_efl = k_efl;
+	z_epp = k_epp;
+	z_lag = k_lag;
+	z_n0abs = k_n0abs;
+	if (z_n0abs < z_eps)
+		z_n0abs = 1.0;
+	z_fnum = k_fnum;
+	z_nlsig = k_nlast;
+	z_objd = k_objd;
+	z_finite = 1 - k_infobj;
+	z_iota = k_iota;
+	z_goe = 1.0 - k_p0*k_iota;
+	if (fabs(z_goe) < 1e-12)
+		z_goe = 1.0;
+	z_stopp = k_p0;
+	z_anyfig = k_anyfig;
+	z_srf = k_srfarg;
+	z_chk = 0;
+	z_dbg = 0;
+	for (k_i = 0; k_i <= b7_nsm; k_i++)
+	{
+		z_vec2[k_i + 1] = b7_ym[k_i];
+		z_vec2[501 + k_i] = b7_um[k_i];
+		z_vec3[k_i + 1] = b7_yc[k_i];
+		z_vec3[501 + k_i] = b7_uc[k_i];
+	}
+	for (k_i = 1; k_i <= b7_nsm; k_i++)
+		for (k_j = 1; k_j <= 6; k_j++)
+			z_vfm[k_i][k_j] = b7_vfm[k_i][k_j];
+	strcpy(b7_ln, "");
+	z_stop = 0;
+	z_main();
+
+	sprintf(b7_ln, " ");
+	b7_out();
+	sprintf(b7_ln, "AberrationCalculator reads this lens file and computes the same coefficients in its C#;");
+	b7_out();
+	sprintf(b7_ln, "run it on the .len (buchdahl or surface_breakdown) and every number above must agree.");
+	b7_out();
+	return (0);
+}
+
+cmd
+buch7_asph(int b7_srfarg, int b7_wavarg, int b7_filearg)
+{
+	b7_wf = 0;
+	if (b7_filearg)
+	{
+		b7_fh = fopen(B7_REPORT, "at");
+		if (b7_fh > 0)
+			b7_wf = 1;
+		else
+			printf("buch7_asph: cannot write %s; carrying on without the report file.\n", B7_REPORT);
+	}
+	b7_run(b7_srfarg, b7_wavarg);
+	if (b7_wf)
+	{
+		fclose(b7_fh);
+		b7_wf = 0;
+		printf("Report written to %s\n", B7_REPORT);
+	}
+}

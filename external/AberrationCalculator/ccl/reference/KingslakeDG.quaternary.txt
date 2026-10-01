@@ -1,0 +1,24 @@
+QUATERNARY (NINTH-ORDER) SPHERICAL ABERRATION
+----------------------------------------------------------------
+Buchdahl's q1p, in the units of his paper IV Table I: the scheme runs at unit
+focal length and nothing here rescales. INTRINSIC is what the surface makes on
+its own; TOTAL adds what it makes by acting on the aberration already reaching
+it. The system figure is the sum of the TOTAL column.
+
+Surf          intrinsic            total        T1-dagger
+1            6.4168E+03       6.4168E+03       0.0000E+00
+2           -1.6196E-01       5.6838E+03       7.2939E+02
+3            1.8945E+00      -1.9043E+02      -1.7177E+03
+4           -2.5600E+03       5.0847E+03      -5.3386E+01
+5            0.0000E+00       0.0000E+00       2.2071E+03
+6           -8.4690E+04      -6.1982E+04       2.3400E+02
+7           -3.4479E-02       1.5108E+03      -4.7829E+02
+8           -2.3324E-03       4.5975E+03       9.8941E+03
+9            3.3805E+04       8.0841E+04       7.4291E+02
+---------------------------------------------------------
+TOTAL                         4.1963E+04
+
+Buchdahl's rule of thumb, from the closing paragraph of paper IV: a system
+intended to work at f/2 should aim at individual contributions of at most
+order 1000 at unit focal length. His own triplet runs to six figures, which
+is why he chose it - it is a poorly corrected system and the table shows it.

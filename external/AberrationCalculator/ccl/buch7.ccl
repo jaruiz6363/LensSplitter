@@ -1,0 +1,1500 @@
+/**********************************************************************
+* cmd buch7 - third-, fifth- and seventh-order Buchdahl coefficients of a
+* centred system of SPHERICAL surfaces, per surface, split into the part
+* each surface generates on its own and the part it generates by acting
+* on the aberration already present when light reaches it; and, on
+* request, the ninth-order spherical aberration.
+*
+* Written by Javier Ruiz with Claude Code, September 2026. The OSLO port
+* of macros/BUCH7.ZPL in C:\GIT\AberrationCalculator. The front end
+* (lens data, the two paraxial rays) is written for OSLO; everything from
+* the macro's stage A on is translated from the macro statement for
+* statement by tools/zpl2ccl, so the arithmetic is the macro's own. The
+* macro and this program's C# are the references it is checked against.
+*
+* REFERENCES
+*
+*   H. A. Buchdahl, "Optical Aberration Coefficients", Dover 1968:
+*   Secs. 31, 203 and 218 (the third and fifth order) and Chapter VI (the
+*   tertiary, the seventh order).
+*   H. A. Buchdahl, J. Opt. Soc. Am. 48, 563 (1958) (paper II) and 48, 747
+*   (1958) (paper III, Tables I and II).
+*   H. A. Buchdahl, "Optical aberration coefficients. IV. The coefficient
+*   of quaternary spherical aberration", J. Opt. Soc. Am. 48, 757 (1958).
+*
+* WHAT IT PRINTS
+*
+*   Every surface's third order (B F C Pi E), fifth order (B5 F1 F2 M1 M2
+*   M3 N1 N2 N3 C5 Pi5 E5) and the twenty seventh-order tau, split into
+*   the INTRINSIC part, which the surface generates from its own curvature
+*   and the rays arriving at it, and the INDUCED part, which it generates
+*   by acting on the aberration already accumulated ahead of it. There is
+*   no induced part at third order. The totals are in transverse measure.
+*
+*   With the first argument 1, also the ninth-order (quaternary) spherical
+*   aberration per surface.
+*
+* RUNNING IT
+*
+*   buch7                    current wavelength, report file
+*   buch7 1                  and the ninth-order spherical aberration
+*   buch7 0 2                at wavelength 2
+*   buch7 0 0 0              without the report file
+*
+*   Each run is added to the end of BS_REPORT (below), as well as going to
+*   the text window, so several lenses can be run into one file. Set it to
+*   a folder that exists; if it cannot be written, buch7 says so and
+*   carries on without it.
+*
+* LIMITS
+*
+*   Spherical and plane surfaces only. A conic or an aspheric term (AD to
+*   AG) makes it stop and point to buch7_asph, which carries them through
+*   the seventh order; there is no ninth order for a figured surface
+*   anywhere. At least two surfaces between object and image (a dummy
+*   plane will do), at most 16. Rotationally symmetric and sequential;
+*   either conjugate; mirrors are carried in the sign of the index.
+**********************************************************************/
+
+#define BS_REPORT  "C:/GIT/AberrationCalculator/ccl/buch7.txt"
+#define BS_MAXS    18
+
+int bs_q9arg   {prompt = "Ninth-order spherical aberration (0 = no, 1 = yes)", lolim = 0, hilim = 1, default(noquery) = 0}
+int bs_wavarg  {prompt = "Wavelength number (0 = the current one)", lolim = 0, hilim = 10, default(noquery) = 0}
+int bs_filearg {prompt = "Also write the report file BS_REPORT (0 = no, 1 = yes)", lolim = 0, hilim = 1, default(noquery) = 1}
+
+static double bs_ns[BS_MAXS];        // index after surface i, signed by the mirror count
+static double bs_ya[BS_MAXS], bs_ua[BS_MAXS];   // basis ray, and the scratch the trace writes
+static double bs_ym[BS_MAXS], bs_um[BS_MAXS];   // marginal: height at i, slope after i
+static double bs_yc[BS_MAXS], bs_uc[BS_MAXS];   // chief
+static int    bs_nsm;
+static int    bs_fh, bs_wf;
+static char   bs_ln[400];
+
+// One line to the text window and, if it is open, the report.
+static cmd
+bs_out()
+{
+	printf("%s\n", bs_ln);
+	if (bs_wf)
+		fprintf(bs_fh, "%s\n", bs_ln);
+	strcpy(bs_ln, "");
+}
+
+// The paraxial ray with height y1 at surface 1 and slope u0 in object space, through every
+// optical surface: bs_ya[i] its height at surface i, bs_ua[i] its slope after surface i,
+// bs_ua[0] the object-space slope. The same recurrence as ParaxialTrace.Propagate.
+static int
+bs_prop(double sp_y1, double sp_u0)
+{
+	int    sp_i;
+	double sp_om;
+
+	bs_ua[0] = sp_u0;
+	bs_ya[0] = 0.0;
+	sp_om = bs_ns[0]*sp_u0;
+	bs_ya[1] = sp_y1;
+	for (sp_i = 1; sp_i <= bs_nsm; sp_i++)
+	{
+		sp_om = sp_om - bs_ya[sp_i]*(bs_ns[sp_i] - bs_ns[sp_i - 1])*cv[sp_i];
+		bs_ua[sp_i] = sp_om/bs_ns[sp_i];
+		if (sp_i < bs_nsm)
+			bs_ya[sp_i + 1] = bs_ya[sp_i] + th[sp_i]*bs_ua[sp_i];
+	}
+	return (0);
+}
+
+// ---- generated from macros/BUCH7.ZPL by zpl2ccl.py: globals ----
+static int    s7_b, s7_bbase, s7_finite, s7_gbase, s7_half, s7_i, s7_j, s7_k, s7_m, s7_nsm;
+static int    s7_obase, s7_q9;
+static double    s7_aa, s7_abq, s7_accb, s7_accb5, s7_accbb, s7_accc, s7_acccb, s7_acce, s7_acce5b, s7_acceb;
+static double    s7_accf, s7_accfb, s7_accpi, s7_ba, s7_bb, s7_bscl, s7_c1, s7_c10, s7_c2, s7_c3;
+static double    s7_c4, s7_c5, s7_c6, s7_c7, s7_c8, s7_c9, s7_ca, s7_cb, s7_cc13, s7_coi;
+static double    s7_cv, s7_cvn, s7_d1, s7_d2, s7_d3, s7_d4, s7_d5, s7_d6, s7_d7, s7_d8;
+static double    s7_d9, s7_dbg, s7_dgap, s7_ea, s7_eb, s7_efac, s7_efl, s7_epp, s7_epr, s7_eps;
+static double    s7_f81, s7_f82, s7_f9, s7_fa, s7_fb, s7_fnum, s7_g1, s7_g10, s7_g2, s7_g3;
+static double    s7_g4, s7_g5, s7_g6, s7_g7, s7_g8, s7_g9, s7_gg, s7_goe, s7_h2, s7_h3;
+static double    s7_h4, s7_h5, s7_h6, s7_h7, s7_hmax, s7_hobj, s7_ib5, s7_ib7, s7_ic5, s7_ie5;
+static double    s7_ie5b, s7_if1, s7_if2, s7_im1, s7_im2, s7_im3, s7_in1, s7_in2, s7_in3, s7_iota;
+static double    s7_ip5, s7_kk, s7_km1, s7_lag, s7_n0abs, s7_na, s7_nb, s7_nlast, s7_objd, s7_p0;
+static double    s7_p100, s7_p102, s7_p104, s7_p107, s7_p109, s7_p112, s7_p114, s7_p31, s7_p32, s7_p33;
+static double    s7_p6, s7_p70, s7_p72, s7_p74, s7_p76, s7_p78, s7_p80, s7_p86, s7_p89, s7_p92;
+static double    s7_p94, s7_p97, s7_p98, s7_p99, s7_pai, s7_paic, s7_paicp, s7_paip, s7_pu, s7_puc;
+static double    s7_pucp, s7_pup, s7_py, s7_pyc, s7_pz, s7_q1p, s7_q1q, s7_q2a, s7_q2p, s7_q3p;
+static double    s7_q4p, s7_q5p, s7_q6p, s7_q9a, s7_q9b, s7_q9c, s7_q9d, s7_q9e, s7_q9f, s7_q9sum;
+static double    s7_q9t, s7_q9v2, s7_q9v9, s7_qcc, s7_qom, s7_qq, s7_qr, s7_sb5, s7_sb7, s7_sc5;
+static double    s7_se5, s7_sf1, s7_sf2, s7_sfc, s7_sfm, s7_sm1, s7_sm2, s7_sm3, s7_sn1, s7_sn2;
+static double    s7_sn3, s7_sp5, s7_ss1, s7_ss2, s7_ss3, s7_ss4, s7_ss5, s7_ss6, s7_sumb, s7_sumc;
+static double    s7_sume, s7_sumf, s7_sump, s7_t1p, s7_t2s, s7_t81s, s7_t9s, s7_tb5, s7_tb7, s7_tc5;
+static double    s7_tcar, s7_te5, s7_te5b, s7_tf1, s7_tf2, s7_tiq, s7_tiq3, s7_tlag, s7_tm1, s7_tm2;
+static double    s7_tm3, s7_tn1, s7_tn2, s7_tn3, s7_tp5, s7_tvp, s7_tvq, s7_typ, s7_tyq, s7_u1;
+static double    s7_u2, s7_u2m, s7_u3, s7_u3m, s7_u4, s7_u4m, s7_u5, s7_u5m, s7_u6, s7_u6m;
+static double    s7_um, s7_up2, s7_up3, s7_up4, s7_up5, s7_up6, s7_up7, s7_up9, s7_v1, s7_v2;
+static double    s7_v2m, s7_v3, s7_v3m, s7_v4, s7_v4m, s7_v5, s7_v5m, s7_v6, s7_v6m, s7_vpk;
+static double    s7_w, s7_x42, s7_x42b, s7_x73, s7_x74, s7_x75, s7_x76, s7_x77, s7_x78, s7_x82;
+static double    s7_x82b, s7_z;
+static double s7_tt[19][251];
+static double s7_vec1[64];
+static double s7_vec2[520];
+static double s7_vec3[520];
+static double s7_vec4[2640];
+static char   s7_unot[100];
+static char   bs_tmp[100];
+
+static int
+s7_zero()
+{
+	int zi, zj;
+	for (zi = 0; zi < 19; zi++) for (zj = 0; zj < 251; zj++) s7_tt[zi][zj] = 0;
+	for (zi = 0; zi < 64; zi++) s7_vec1[zi] = 0.0;
+	for (zi = 0; zi < 520; zi++) s7_vec2[zi] = 0.0;
+	for (zi = 0; zi < 520; zi++) s7_vec3[zi] = 0.0;
+	for (zi = 0; zi < 2640; zi++) s7_vec4[zi] = 0.0;
+	return (0);
+}
+
+// ---- generated: the macro's subroutines ----
+
+// ---- generated: the macro's body from stage A on ----
+static int    s7_stop;
+
+static int
+s7_part1()
+{
+	strcat(bs_ln, "Third order, per surface, unconverted - multiply by the F/number above to"); bs_out();
+	strcat(bs_ln, "get a transverse aberration in lens units, which is done for the totals."); bs_out();
+	strcat(bs_ln, " "); bs_out();
+	strcat(bs_ln, " Surf              B              F              C             Pi              E"); bs_out();
+	s7_sumb = 0;
+	s7_sumf = 0;
+	s7_sumc = 0;
+	s7_sump = 0;
+	s7_sume = 0;
+	for (s7_i = 1; s7_i <= s7_nsm; s7_i = s7_i + (1))
+	{
+		s7_cv = cv[s7_i];
+		s7_nb = bs_ns[s7_i - 1];
+		s7_na = bs_ns[s7_i];
+		if (fabs(s7_na) < s7_eps) { s7_na = 1; }
+		s7_kk = s7_nb / s7_na;
+		s7_km1 = s7_kk - 1;
+		s7_py = s7_vec2[s7_i + 1];
+		s7_pu = s7_vec2[500 + s7_i];
+		s7_pup = s7_vec2[501 + s7_i];
+		s7_pyc = s7_vec3[s7_i + 1];
+		s7_puc = s7_vec3[500 + s7_i];
+		s7_pucp = s7_vec3[501 + s7_i];
+		s7_pai = s7_cv * s7_py + s7_pu;
+		s7_paic = s7_cv * s7_pyc + s7_puc;
+		s7_pz = s7_cv * s7_km1 * s7_lag * s7_lag / s7_nb;
+		s7_sfm = s7_nb * s7_km1 * s7_py * (s7_pai + s7_pup);
+		s7_sfc = s7_nb * s7_km1 * s7_pyc * (s7_paic + s7_pucp);
+		s7_ba = s7_sfm * s7_pai * s7_pai;
+		s7_fa = s7_sfm * s7_pai * s7_paic;
+		s7_ca = s7_sfm * s7_paic * s7_paic;
+		s7_fb = s7_sfc * s7_pai * s7_paic;
+		s7_ea = s7_fb + s7_lag * s7_km1 * s7_paic * (s7_pucp + s7_puc);
+		s7_bb = s7_sfc * s7_paic * s7_paic;
+		s7_cb = s7_sfc * s7_pai * s7_pai;
+		s7_eb = s7_fa - s7_lag * s7_km1 * s7_pai * (s7_pup + s7_pu);
+		s7_b = (s7_i - 1) * 160;
+		s7_vec4[s7_b + 1] = s7_ba;
+		s7_vec4[s7_b + 2] = s7_fa;
+		s7_vec4[s7_b + 3] = s7_ca;
+		s7_vec4[s7_b + 4] = s7_pz;
+		s7_vec4[s7_b + 5] = s7_ea;
+		s7_vec4[s7_b + 6] = s7_bb;
+		s7_vec4[s7_b + 7] = s7_fb;
+		s7_vec4[s7_b + 8] = s7_cb;
+		s7_vec4[s7_b + 9] = s7_eb;
+		s7_paip = s7_pai * s7_kk;
+		s7_paicp = s7_paic * s7_kk;
+		s7_w = (s7_pai * s7_pai + s7_paip * s7_paip + s7_pup * s7_pup - 3 * s7_pu * s7_pu) / 8;
+		s7_x73 = 3 * s7_pai * s7_paip + 2 * s7_pup * s7_pup - 3 * s7_pu * s7_pu;
+		s7_x74 = 3 * s7_pai * s7_paicp + 2 * s7_pup * s7_pucp - 3 * s7_pu * s7_puc;
+		s7_x75 = 3 * s7_paic * s7_paicp + 2 * s7_pucp * s7_pucp - 3 * s7_puc * s7_puc;
+		s7_x76 = s7_pai * (3 * s7_pu - s7_pup);
+		s7_x77 = s7_paic * (2 * s7_pu - s7_pup) + s7_pai * s7_puc;
+		s7_x78 = s7_paic * (3 * s7_puc - s7_pucp);
+		s7_x42 = s7_pyc * s7_pai * (s7_paic - s7_puc) + s7_py * s7_paic * (s7_pucp + s7_puc);
+		s7_x82 = s7_pyc * s7_pu * (s7_paic - s7_puc) - s7_py * s7_paicp * (s7_pucp + s7_puc);
+		s7_x42b = s7_py * s7_paic * (s7_pai - s7_pu) + s7_pyc * s7_pai * (s7_pup + s7_pu);
+		s7_x82b = s7_py * s7_puc * (s7_pai - s7_pu) - s7_pyc * s7_paip * (s7_pup + s7_pu);
+		s7_q1p = 3 * s7_w * s7_sfm * s7_pai;
+		s7_q2p = s7_sfm * (s7_paic * s7_x73 + s7_pai * s7_x74 - s7_pucp * s7_x76 - s7_pup * s7_x77) / 4;
+		s7_q3p = s7_nb * s7_km1 * (s7_x42 * s7_x73 + s7_x76 * s7_x82 + s7_py * (s7_pai + s7_pup) * (s7_pai * s7_x75 - s7_pup * s7_x78)) / 4;
+		s7_q4p = s7_sfm * (s7_paic * s7_x74 - s7_pucp * s7_x77);
+		s7_q5p = s7_nb * s7_km1 * (s7_x42 * s7_x74 + s7_x77 * s7_x82 + s7_py * (s7_pai + s7_pup) * (s7_paic * s7_x75 - s7_pucp * s7_x78)) / 4;
+		s7_q6p = s7_nb * s7_km1 * (s7_x42 * s7_x75 + s7_x78 * s7_x82) / 4;
+		s7_q1q = s7_nb * s7_km1 * (s7_x42b * s7_x73 + s7_x76 * s7_x82b) / 4;
+		s7_t1p = 10 * s7_w * s7_w + s7_sfm * s7_pai * s7_cv * (2 * s7_pup - 5 * s7_pu) / s7_nb / 8;
+		s7_ib5 = s7_pai * s7_q1p;
+		s7_if1 = s7_paic * s7_q1p + s7_pai * s7_q2p;
+		s7_if2 = s7_pai * s7_q2p;
+		s7_im1 = 2 * s7_paic * s7_q2p;
+		s7_im2 = s7_pai * s7_q3p;
+		s7_im3 = s7_pai * s7_q4p;
+		s7_in1 = s7_paic * s7_q3p;
+		s7_in2 = s7_paic * s7_q4p + 2 * s7_pai * s7_q5p;
+		s7_in3 = s7_pai * s7_q5p;
+		s7_ic5 = 0.5 * s7_paic * s7_q5p;
+		s7_ip5 = s7_pai * s7_q6p - 0.5 * s7_paic * s7_q5p;
+		s7_ie5 = s7_paic * s7_q6p;
+		s7_ie5b = s7_pai * s7_q1q;
+		s7_ib7 = s7_ba * s7_t1p;
+		s7_vec4[s7_b + 10] = s7_ib5;
+		s7_vec4[s7_b + 11] = s7_if1;
+		s7_vec4[s7_b + 12] = s7_if2;
+		s7_vec4[s7_b + 13] = s7_im1;
+		s7_vec4[s7_b + 14] = s7_im2;
+		s7_vec4[s7_b + 15] = s7_im3;
+		s7_vec4[s7_b + 16] = s7_in1;
+		s7_vec4[s7_b + 17] = s7_in2;
+		s7_vec4[s7_b + 18] = s7_in3;
+		s7_vec4[s7_b + 19] = s7_ic5;
+		s7_vec4[s7_b + 20] = s7_ip5;
+		s7_vec4[s7_b + 21] = s7_ie5;
+		s7_vec4[s7_b + 22] = s7_ib7;
+		s7_vec4[s7_b + 23] = s7_ie5b;
+		s7_sumb = s7_sumb + s7_ba;
+		s7_sumf = s7_sumf + s7_fa;
+		s7_sumc = s7_sumc + s7_ca;
+		s7_sump = s7_sump + s7_pz;
+		s7_sume = s7_sume + s7_ea;
+		sprintf(bs_tmp, "%5.0f", 1.0*(s7_i)); strcat(bs_ln, bs_tmp);
+		sprintf(bs_tmp, "%15.6e", 1.0*(s7_ba)); strcat(bs_ln, bs_tmp); sprintf(bs_tmp, "%15.6e", 1.0*(s7_fa)); strcat(bs_ln, bs_tmp); sprintf(bs_tmp, "%15.6e", 1.0*(s7_ca)); strcat(bs_ln, bs_tmp); sprintf(bs_tmp, "%15.6e", 1.0*(s7_pz)); strcat(bs_ln, bs_tmp); sprintf(bs_tmp, "%15.6e", 1.0*(s7_ea)); strcat(bs_ln, bs_tmp); bs_out();
+	}
+	strcat(bs_ln, " "); bs_out();
+	strcat(bs_ln, "  SUM");
+	sprintf(bs_tmp, "%15.6e", 1.0*(s7_sumb)); strcat(bs_ln, bs_tmp); sprintf(bs_tmp, "%15.6e", 1.0*(s7_sumf)); strcat(bs_ln, bs_tmp); sprintf(bs_tmp, "%15.6e", 1.0*(s7_sumc)); strcat(bs_ln, bs_tmp); sprintf(bs_tmp, "%15.6e", 1.0*(s7_sump)); strcat(bs_ln, bs_tmp); sprintf(bs_tmp, "%15.6e", 1.0*(s7_sume)); strcat(bs_ln, bs_tmp); bs_out();
+	s7_accb = 0;
+	s7_accf = 0;
+	s7_accc = 0;
+	s7_acce = 0;
+	s7_accpi = 0;
+	s7_accbb = 0;
+	s7_accfb = 0;
+	s7_acccb = 0;
+	s7_acceb = 0;
+	s7_accb5 = 0;
+	s7_acce5b = 0;
+	return (0);
+}
+
+static int
+s7_part2()
+{
+	for (s7_i = 1; s7_i <= s7_nsm; s7_i = s7_i + (1))
+	{
+		s7_b = (s7_i - 1) * 160;
+		s7_ba = s7_vec4[s7_b + 1];
+		s7_fa = s7_vec4[s7_b + 2];
+		s7_ca = s7_vec4[s7_b + 3];
+		s7_pz = s7_vec4[s7_b + 4];
+		s7_ea = s7_vec4[s7_b + 5];
+		s7_bb = s7_vec4[s7_b + 6];
+		s7_fb = s7_vec4[s7_b + 7];
+		s7_cb = s7_vec4[s7_b + 8];
+		s7_eb = s7_vec4[s7_b + 9];
+		s7_ib5 = s7_vec4[s7_b + 10];
+		s7_if1 = s7_vec4[s7_b + 11];
+		s7_if2 = s7_vec4[s7_b + 12];
+		s7_im1 = s7_vec4[s7_b + 13];
+		s7_im2 = s7_vec4[s7_b + 14];
+		s7_im3 = s7_vec4[s7_b + 15];
+		s7_in1 = s7_vec4[s7_b + 16];
+		s7_in2 = s7_vec4[s7_b + 17];
+		s7_in3 = s7_vec4[s7_b + 18];
+		s7_ic5 = s7_vec4[s7_b + 19];
+		s7_ip5 = s7_vec4[s7_b + 20];
+		s7_ie5 = s7_vec4[s7_b + 21];
+		s7_ib7 = s7_vec4[s7_b + 22];
+		s7_ie5b = s7_vec4[s7_b + 23];
+		s7_z = 0.5 * s7_accb * s7_accb * (s7_pz + 3 * s7_ca) / s7_lag;
+		s7_z = s7_z + 3 * (s7_accb5 - s7_accb * s7_acceb / s7_lag) * s7_fa;
+		s7_z = s7_z + 3 * (0.5 * s7_acceb * s7_acceb / s7_lag - s7_acce5b) * s7_ba;
+		s7_z = (s7_z + s7_accb * (s7_if1 + s7_if2) - 5 * s7_acceb * s7_ib5) / (2 * s7_lag);
+		s7_tb7 = s7_ib7 + s7_z;
+		s7_tb5 = s7_ib5 + 1.5 * (s7_accb * s7_fa - s7_acceb * s7_ba) / s7_lag;
+		s7_z = s7_accb * (s7_pz + 4 * s7_ca) + (5 * s7_accf - 4 * s7_acceb) * s7_fa;
+		s7_z = s7_z - (2 * s7_accpi + 5 * s7_acccb) * s7_ba;
+		s7_tf1 = s7_if1 + s7_z / (2 * s7_lag);
+		s7_z = s7_accb * (s7_pz + 2 * s7_ca) + 2 * (2 * s7_accf - s7_acceb) * s7_fa;
+		s7_z = s7_z - (s7_accpi + 4 * s7_acccb) * s7_ba;
+		s7_tf2 = s7_if2 + s7_z / (2 * s7_lag);
+		s7_z = s7_accb * s7_ea + (4 * s7_accf - s7_acceb) * s7_ca - s7_accfb * s7_ba;
+		s7_z = s7_z + (s7_accc - 4 * s7_acccb - 2 * s7_accpi) * s7_fa;
+		s7_tm1 = s7_im1 + s7_z / s7_lag;
+		s7_z = s7_accb * s7_ea + (2 * s7_accf - s7_acceb) * (s7_pz + s7_ca);
+		s7_z = s7_z + (3 * s7_accc - 2 * s7_acccb + s7_accpi) * s7_fa - 3 * s7_accfb * s7_ba;
+		s7_tm2 = s7_im2 + s7_z / (2 * s7_lag);
+		s7_z = s7_accf * (s7_pz + 2 * s7_ca) - s7_accfb * s7_ba + (s7_accc - 2 * s7_acccb) * s7_fa;
+		s7_tm3 = s7_im3 + 2 * s7_z / s7_lag;
+		s7_z = 3 * s7_accf * s7_ea - (s7_accpi + s7_acccb) * (s7_pz + s7_ca) + 2 * (s7_accc - s7_acccb) * s7_ca;
+		s7_z = s7_z + (s7_acce - 2 * s7_accfb) * s7_fa - s7_accbb * s7_ba;
+		s7_tn1 = s7_in1 + s7_z / (2 * s7_lag);
+		s7_z = 3 * s7_accf * s7_ea + (s7_accpi - s7_acccb + 3 * s7_accc) * (s7_pz + 3 * s7_ca);
+		s7_z = s7_z - s7_accbb * s7_ba;
+		s7_z = s7_z - (s7_accpi + s7_accc) * s7_ca;
+		s7_z = s7_z + (s7_acce - 8 * s7_accfb) * s7_fa;
+		s7_tn2 = s7_in2 + s7_z / s7_lag;
+		s7_z = s7_accf * s7_ea + (3 * s7_accc + s7_accpi - s7_acccb) * (s7_pz + s7_ca) - s7_accbb * s7_ba;
+		s7_z = s7_z + (s7_accpi + s7_accc) * s7_ca + (s7_acce - 4 * s7_accfb) * s7_fa;
+		s7_tn3 = s7_in3 + s7_z / (2 * s7_lag);
+		s7_z = (4 * s7_accc + s7_accpi) * s7_ea - s7_accfb * s7_pz + 2 * (s7_acce - 2 * s7_accfb) * s7_ca;
+		s7_z = s7_z - 2 * s7_accbb * s7_fa;
+		s7_tc5 = s7_ic5 + s7_z / (4 * s7_lag);
+		s7_z = (s7_accpi - 2 * s7_accc) * s7_ea + (4 * s7_acce - s7_accfb) * s7_pz;
+		s7_z = s7_z - 2 * s7_accbb * s7_fa;
+		s7_z = s7_z + 2 * (s7_acce + s7_accfb) * s7_ca;
+		s7_tp5 = s7_ip5 + s7_z / (4 * s7_lag);
+		s7_te5 = s7_ie5 + (3 * s7_acce * s7_ea - s7_accbb * (s7_pz + 3 * s7_ca)) / (2 * s7_lag);
+		s7_te5b = s7_ie5b + (s7_accb * (s7_pz + 3 * s7_cb) - 3 * s7_acceb * s7_eb) / (2 * s7_lag);
+		s7_vec4[s7_b + 50] = s7_tb5;
+		s7_vec4[s7_b + 51] = s7_tf1;
+		s7_vec4[s7_b + 52] = s7_tf2;
+		s7_vec4[s7_b + 53] = s7_tm1;
+		s7_vec4[s7_b + 54] = s7_tm2;
+		s7_vec4[s7_b + 55] = s7_tm3;
+		s7_vec4[s7_b + 56] = s7_tn1;
+		s7_vec4[s7_b + 57] = s7_tn2;
+		s7_vec4[s7_b + 58] = s7_tn3;
+		s7_vec4[s7_b + 59] = s7_tc5;
+		s7_vec4[s7_b + 60] = s7_tp5;
+		s7_vec4[s7_b + 61] = s7_te5;
+		s7_vec4[s7_b + 62] = s7_tb7;
+		s7_accb = s7_accb + s7_ba;
+		s7_accf = s7_accf + s7_fa;
+		s7_accc = s7_accc + s7_ca;
+		s7_acce = s7_acce + s7_ea;
+		s7_accpi = s7_accpi + s7_pz;
+		s7_accbb = s7_accbb + s7_bb;
+		s7_accfb = s7_accfb + s7_fb;
+		s7_acccb = s7_acccb + s7_cb;
+		s7_acceb = s7_acceb + s7_eb;
+		s7_accb5 = s7_accb5 + s7_tb5;
+		s7_acce5b = s7_acce5b + s7_te5b;
+	}
+	strcat(bs_ln, " "); bs_out();
+	strcat(bs_ln, "Fifth order, per surface, unconverted - same factor as the third order."); bs_out();
+	strcat(bs_ln, " "); bs_out();
+	strcat(bs_ln, " Surf                B5             F1             F2             M1             M2             M3"); bs_out();
+	for (s7_i = 1; s7_i <= s7_nsm; s7_i = s7_i + (1))
+	{
+		s7_b = (s7_i - 1) * 160;
+		sprintf(bs_tmp, "%5.0f", 1.0*(s7_i)); strcat(bs_ln, bs_tmp);
+		strcat(bs_ln, "  int"); sprintf(bs_tmp, "%15.6e", 1.0*(s7_vec4[s7_b + 10])); strcat(bs_ln, bs_tmp); sprintf(bs_tmp, "%15.6e", 1.0*(s7_vec4[s7_b + 11])); strcat(bs_ln, bs_tmp); sprintf(bs_tmp, "%15.6e", 1.0*(s7_vec4[s7_b + 12])); strcat(bs_ln, bs_tmp); sprintf(bs_tmp, "%15.6e", 1.0*(s7_vec4[s7_b + 13])); strcat(bs_ln, bs_tmp); sprintf(bs_tmp, "%15.6e", 1.0*(s7_vec4[s7_b + 14])); strcat(bs_ln, bs_tmp); sprintf(bs_tmp, "%15.6e", 1.0*(s7_vec4[s7_b + 15])); strcat(bs_ln, bs_tmp); bs_out();
+		strcat(bs_ln, "      ind"); sprintf(bs_tmp, "%15.6e", 1.0*(s7_vec4[s7_b + 50] - s7_vec4[s7_b + 10])); strcat(bs_ln, bs_tmp); sprintf(bs_tmp, "%15.6e", 1.0*(s7_vec4[s7_b + 51] - s7_vec4[s7_b + 11])); strcat(bs_ln, bs_tmp); sprintf(bs_tmp, "%15.6e", 1.0*(s7_vec4[s7_b + 52] - s7_vec4[s7_b + 12])); strcat(bs_ln, bs_tmp); sprintf(bs_tmp, "%15.6e", 1.0*(s7_vec4[s7_b + 53] - s7_vec4[s7_b + 13])); strcat(bs_ln, bs_tmp); sprintf(bs_tmp, "%15.6e", 1.0*(s7_vec4[s7_b + 54] - s7_vec4[s7_b + 14])); strcat(bs_ln, bs_tmp); sprintf(bs_tmp, "%15.6e", 1.0*(s7_vec4[s7_b + 55] - s7_vec4[s7_b + 15])); strcat(bs_ln, bs_tmp); bs_out();
+		strcat(bs_ln, "      tot"); sprintf(bs_tmp, "%15.6e", 1.0*(s7_vec4[s7_b + 50])); strcat(bs_ln, bs_tmp); sprintf(bs_tmp, "%15.6e", 1.0*(s7_vec4[s7_b + 51])); strcat(bs_ln, bs_tmp); sprintf(bs_tmp, "%15.6e", 1.0*(s7_vec4[s7_b + 52])); strcat(bs_ln, bs_tmp); sprintf(bs_tmp, "%15.6e", 1.0*(s7_vec4[s7_b + 53])); strcat(bs_ln, bs_tmp); sprintf(bs_tmp, "%15.6e", 1.0*(s7_vec4[s7_b + 54])); strcat(bs_ln, bs_tmp); sprintf(bs_tmp, "%15.6e", 1.0*(s7_vec4[s7_b + 55])); strcat(bs_ln, bs_tmp); bs_out();
+	}
+	strcat(bs_ln, " "); bs_out();
+	strcat(bs_ln, " Surf                N1             N2             N3             C5            Pi5             E5"); bs_out();
+	for (s7_i = 1; s7_i <= s7_nsm; s7_i = s7_i + (1))
+	{
+		s7_b = (s7_i - 1) * 160;
+		sprintf(bs_tmp, "%5.0f", 1.0*(s7_i)); strcat(bs_ln, bs_tmp);
+		strcat(bs_ln, "  int"); sprintf(bs_tmp, "%15.6e", 1.0*(s7_vec4[s7_b + 16])); strcat(bs_ln, bs_tmp); sprintf(bs_tmp, "%15.6e", 1.0*(s7_vec4[s7_b + 17])); strcat(bs_ln, bs_tmp); sprintf(bs_tmp, "%15.6e", 1.0*(s7_vec4[s7_b + 18])); strcat(bs_ln, bs_tmp); sprintf(bs_tmp, "%15.6e", 1.0*(s7_vec4[s7_b + 19])); strcat(bs_ln, bs_tmp); sprintf(bs_tmp, "%15.6e", 1.0*(s7_vec4[s7_b + 20])); strcat(bs_ln, bs_tmp); sprintf(bs_tmp, "%15.6e", 1.0*(s7_vec4[s7_b + 21])); strcat(bs_ln, bs_tmp); bs_out();
+		strcat(bs_ln, "      ind"); sprintf(bs_tmp, "%15.6e", 1.0*(s7_vec4[s7_b + 56] - s7_vec4[s7_b + 16])); strcat(bs_ln, bs_tmp); sprintf(bs_tmp, "%15.6e", 1.0*(s7_vec4[s7_b + 57] - s7_vec4[s7_b + 17])); strcat(bs_ln, bs_tmp); sprintf(bs_tmp, "%15.6e", 1.0*(s7_vec4[s7_b + 58] - s7_vec4[s7_b + 18])); strcat(bs_ln, bs_tmp); sprintf(bs_tmp, "%15.6e", 1.0*(s7_vec4[s7_b + 59] - s7_vec4[s7_b + 19])); strcat(bs_ln, bs_tmp); sprintf(bs_tmp, "%15.6e", 1.0*(s7_vec4[s7_b + 60] - s7_vec4[s7_b + 20])); strcat(bs_ln, bs_tmp); sprintf(bs_tmp, "%15.6e", 1.0*(s7_vec4[s7_b + 61] - s7_vec4[s7_b + 21])); strcat(bs_ln, bs_tmp); bs_out();
+		strcat(bs_ln, "      tot"); sprintf(bs_tmp, "%15.6e", 1.0*(s7_vec4[s7_b + 56])); strcat(bs_ln, bs_tmp); sprintf(bs_tmp, "%15.6e", 1.0*(s7_vec4[s7_b + 57])); strcat(bs_ln, bs_tmp); sprintf(bs_tmp, "%15.6e", 1.0*(s7_vec4[s7_b + 58])); strcat(bs_ln, bs_tmp); sprintf(bs_tmp, "%15.6e", 1.0*(s7_vec4[s7_b + 59])); strcat(bs_ln, bs_tmp); sprintf(bs_tmp, "%15.6e", 1.0*(s7_vec4[s7_b + 60])); strcat(bs_ln, bs_tmp); sprintf(bs_tmp, "%15.6e", 1.0*(s7_vec4[s7_b + 61])); strcat(bs_ln, bs_tmp); bs_out();
+	}
+	strcat(bs_ln, " "); bs_out();
+	strcat(bs_ln, " Surf                B7      (seventh-order spherical aberration)"); bs_out();
+	for (s7_i = 1; s7_i <= s7_nsm; s7_i = s7_i + (1))
+	{
+		s7_b = (s7_i - 1) * 160;
+		sprintf(bs_tmp, "%5.0f", 1.0*(s7_i)); strcat(bs_ln, bs_tmp);
+		strcat(bs_ln, "  int"); sprintf(bs_tmp, "%15.6e", 1.0*(s7_vec4[s7_b + 22])); strcat(bs_ln, bs_tmp); strcat(bs_ln, "  ind"); sprintf(bs_tmp, "%15.6e", 1.0*(s7_vec4[s7_b + 62] - s7_vec4[s7_b + 22])); strcat(bs_ln, bs_tmp); strcat(bs_ln, "  tot"); sprintf(bs_tmp, "%15.6e", 1.0*(s7_vec4[s7_b + 62])); strcat(bs_ln, bs_tmp); bs_out();
+	}
+	s7_sb5 = 0;
+	s7_sf1 = 0;
+	s7_sf2 = 0;
+	s7_sm1 = 0;
+	s7_sm2 = 0;
+	s7_sm3 = 0;
+	s7_sn1 = 0;
+	s7_sn2 = 0;
+	s7_sn3 = 0;
+	s7_sc5 = 0;
+	s7_sp5 = 0;
+	s7_se5 = 0;
+	s7_sb7 = 0;
+	for (s7_i = 1; s7_i <= s7_nsm; s7_i = s7_i + (1))
+	{
+		s7_b = (s7_i - 1) * 160;
+		s7_sb5 = s7_sb5 + s7_vec4[s7_b + 50];
+		s7_sf1 = s7_sf1 + s7_vec4[s7_b + 51];
+		s7_sf2 = s7_sf2 + s7_vec4[s7_b + 52];
+		s7_sm1 = s7_sm1 + s7_vec4[s7_b + 53];
+		s7_sm2 = s7_sm2 + s7_vec4[s7_b + 54];
+		s7_sm3 = s7_sm3 + s7_vec4[s7_b + 55];
+		s7_sn1 = s7_sn1 + s7_vec4[s7_b + 56];
+		s7_sn2 = s7_sn2 + s7_vec4[s7_b + 57];
+		s7_sn3 = s7_sn3 + s7_vec4[s7_b + 58];
+		s7_sc5 = s7_sc5 + s7_vec4[s7_b + 59];
+		s7_sp5 = s7_sp5 + s7_vec4[s7_b + 60];
+		s7_se5 = s7_se5 + s7_vec4[s7_b + 61];
+		s7_sb7 = s7_sb7 + s7_vec4[s7_b + 62];
+	}
+	strcat(bs_ln, " "); bs_out();
+	strcat(bs_ln, "System totals, transverse measure"); bs_out();
+	strcat(bs_ln, "   B  "); sprintf(bs_tmp, "%15.6e", 1.0*(s7_sumb * s7_fnum)); strcat(bs_ln, bs_tmp); strcat(bs_ln, "   F  "); sprintf(bs_tmp, "%15.6e", 1.0*(s7_sumf * s7_fnum)); strcat(bs_ln, bs_tmp); strcat(bs_ln, "   C  "); sprintf(bs_tmp, "%15.6e", 1.0*(s7_sumc * s7_fnum)); strcat(bs_ln, bs_tmp); bs_out();
+	strcat(bs_ln, "   Pi "); sprintf(bs_tmp, "%15.6e", 1.0*(s7_sump * s7_fnum)); strcat(bs_ln, bs_tmp); strcat(bs_ln, "   E  "); sprintf(bs_tmp, "%15.6e", 1.0*(s7_sume * s7_fnum)); strcat(bs_ln, bs_tmp); bs_out();
+	strcat(bs_ln, "   B5 "); sprintf(bs_tmp, "%15.6e", 1.0*(s7_sb5 * s7_fnum)); strcat(bs_ln, bs_tmp); strcat(bs_ln, "   F1 "); sprintf(bs_tmp, "%15.6e", 1.0*(s7_sf1 * s7_fnum)); strcat(bs_ln, bs_tmp); strcat(bs_ln, "   F2 "); sprintf(bs_tmp, "%15.6e", 1.0*(s7_sf2 * s7_fnum)); strcat(bs_ln, bs_tmp); bs_out();
+	strcat(bs_ln, "   M1 "); sprintf(bs_tmp, "%15.6e", 1.0*(s7_sm1 * s7_fnum)); strcat(bs_ln, bs_tmp); strcat(bs_ln, "   M2 "); sprintf(bs_tmp, "%15.6e", 1.0*(s7_sm2 * s7_fnum)); strcat(bs_ln, bs_tmp); strcat(bs_ln, "   M3 "); sprintf(bs_tmp, "%15.6e", 1.0*(s7_sm3 * s7_fnum)); strcat(bs_ln, bs_tmp); bs_out();
+	strcat(bs_ln, "   N1 "); sprintf(bs_tmp, "%15.6e", 1.0*(s7_sn1 * s7_fnum)); strcat(bs_ln, bs_tmp); strcat(bs_ln, "   N2 "); sprintf(bs_tmp, "%15.6e", 1.0*(s7_sn2 * s7_fnum)); strcat(bs_ln, bs_tmp); strcat(bs_ln, "   N3 "); sprintf(bs_tmp, "%15.6e", 1.0*(s7_sn3 * s7_fnum)); strcat(bs_ln, bs_tmp); bs_out();
+	strcat(bs_ln, "   C5 "); sprintf(bs_tmp, "%15.6e", 1.0*(s7_sc5 * s7_fnum)); strcat(bs_ln, bs_tmp); strcat(bs_ln, "   Pi5"); sprintf(bs_tmp, "%15.6e", 1.0*(s7_sp5 * s7_fnum)); strcat(bs_ln, bs_tmp); strcat(bs_ln, "   E5 "); sprintf(bs_tmp, "%15.6e", 1.0*(s7_se5 * s7_fnum)); strcat(bs_ln, bs_tmp); bs_out();
+	strcat(bs_ln, "   B7 "); sprintf(bs_tmp, "%15.6e", 1.0*(s7_sb7 * s7_fnum)); strcat(bs_ln, bs_tmp); bs_out();
+	strcat(bs_ln, " "); bs_out();
+	s7_dbg = 1;
+	for (s7_i = 1; s7_i <= s7_nsm; s7_i = s7_i + (1))
+	{
+		for (s7_j = 1; s7_j <= 249; s7_j = s7_j + (1))
+		{
+			s7_tt[s7_i][s7_j] = 0;
+		}
+	}
+	s7_typ = 1;
+	s7_tvp = s7_iota;
+	s7_tyq = s7_p0 / s7_goe / s7_n0abs;
+	s7_tvq = 1 / s7_goe / s7_n0abs;
+	return (0);
+}
+
+static int
+s7_part3()
+{
+	for (s7_i = 1; s7_i <= s7_nsm; s7_i = s7_i + (1))
+	{
+		s7_cvn = cv[s7_i] * s7_efl;
+		s7_nb = bs_ns[s7_i - 1];
+		s7_na = bs_ns[s7_i];
+		if (fabs(s7_na) < s7_eps) { s7_na = 1; }
+		s7_kk = s7_nb / s7_na;
+		if (s7_i > 1)
+		{
+			s7_dgap = th[s7_i - 1] / s7_efl;
+			s7_typ = s7_typ - s7_dgap * s7_tvp;
+			s7_tyq = s7_tyq - s7_dgap * s7_tvq;
+		}
+		s7_tt[s7_i][1] = s7_typ;
+		s7_tt[s7_i][2] = s7_tvp;
+		s7_tt[s7_i][3] = s7_cvn * s7_typ - s7_tvp;
+		s7_tt[s7_i][4] = s7_tyq;
+		s7_tt[s7_i][5] = s7_tvq;
+		s7_tiq = s7_cvn * s7_tyq - s7_tvq;
+		if (fabs(s7_tt[s7_i][3]) > 1E-30)
+		{
+			s7_tt[s7_i][6] = s7_tiq / s7_tt[s7_i][3];
+		}
+		else
+		{
+			s7_tt[s7_i][6] = 0;
+		}
+		s7_tt[s7_i][7] = -s7_tvp * s7_tt[s7_i][6] + s7_tvq;
+		s7_tt[s7_i][8] = (s7_kk - 1) * s7_cvn / s7_nb;
+		s7_tt[s7_i][9] = s7_tvp * s7_tvp;
+		s7_tt[s7_i][156] = (1 - s7_kk) * s7_cvn * s7_typ + s7_kk * s7_tvp;
+		s7_tt[s7_i][157] = (1 - s7_kk) * s7_cvn * s7_tyq + s7_kk * s7_tvq;
+		s7_tlag = s7_tt[s7_i][5] * s7_tt[s7_i][1] - s7_tt[s7_i][2] * s7_tt[s7_i][4];
+		if (fabs(s7_tlag) > 1E-30)
+		{
+			s7_gg = 0.5 * (s7_tt[s7_i][156] - s7_tt[s7_i][3]) * (s7_kk - 1) * s7_tt[s7_i][1] / s7_tlag;
+		}
+		else
+		{
+			s7_gg = 0;
+		}
+		s7_tt[s7_i][10] = s7_gg * s7_tt[s7_i][3] * s7_tt[s7_i][3];
+		s7_tt[s7_i][11] = s7_gg * s7_tt[s7_i][3] * s7_tiq;
+		s7_tt[s7_i][12] = 2 * s7_gg * s7_tiq * s7_tiq;
+		s7_tt[s7_i][13] = s7_gg * s7_tiq * s7_tiq - 0.5 * s7_tt[s7_i][8];
+		if (fabs(s7_tt[s7_i][3]) > 1E-30)
+		{
+			s7_coi = s7_cvn / s7_tt[s7_i][3];
+		}
+		else
+		{
+			if (fabs(s7_tt[s7_i][2]) < 1E-30)
+			{
+				s7_coi = 1 / s7_tt[s7_i][1];
+			}
+			else
+			{
+				s7_coi = 0;
+			}
+		}
+		s7_tiq3 = s7_tiq * s7_tiq * s7_tiq;
+		if (fabs(s7_tlag) > 1E-30)
+		{
+			s7_z = s7_coi * (s7_tt[s7_i][1] * s7_tt[s7_i][1] * s7_tiq3 / s7_tlag - s7_tiq / s7_nb);
+			s7_z = s7_z - (1 + s7_kk) * s7_tt[s7_i][1] * s7_tiq3 / s7_tlag;
+			s7_tt[s7_i][14] = 0.5 * (s7_kk - 1) * s7_z;
+		}
+		else
+		{
+			s7_tt[s7_i][14] = 0;
+		}
+		s7_tt[s7_i][158] = s7_coi;
+		s7_tt[s7_i][159] = s7_kk;
+		s7_tt[s7_i][160] = s7_nb;
+		s7_tvp = s7_tt[s7_i][156];
+		s7_tvq = s7_tt[s7_i][157];
+	}
+	for (s7_i = 1; s7_i <= s7_nsm; s7_i = s7_i + (1))
+	{
+		for (s7_j = 10; s7_j <= 14; s7_j = s7_j + (1))
+		{
+			s7_z = 0;
+			if (s7_i > 1)
+			{
+				for (s7_m = 1; s7_m <= s7_i - 1; s7_m = s7_m + (1))
+				{
+					s7_z = s7_z + s7_tt[s7_m][s7_j];
+				}
+			}
+			s7_tt[s7_i][s7_j + 5] = s7_z;
+		}
+	}
+	s7_f9 = s7_tt[1][9];
+	s7_f81 = s7_tt[1][2] * s7_tt[1][5];
+	s7_f82 = s7_tt[1][5] * s7_tt[1][5];
+	for (s7_i = 1; s7_i <= s7_nsm; s7_i = s7_i + (1))
+	{
+		s7_tt[s7_i][20] = 0.5 * (s7_f9 - s7_tt[s7_i][9]) + s7_tt[s7_i][16];
+		s7_tt[s7_i][21] = 0.5 * (s7_f81 - s7_tt[s7_i][2] * s7_tt[s7_i][5]) + s7_tt[s7_i][18];
+		s7_tt[s7_i][22] = 2 * (s7_tt[s7_i][21] - s7_tt[s7_i][18]) + s7_tt[s7_i][17];
+		s7_tt[s7_i][23] = 0.5 * (s7_f82 - s7_tt[s7_i][5] * s7_tt[s7_i][5]) + s7_tt[s7_i][19];
+		if (s7_i == 1)
+		{
+			s7_tt[s7_i][24] = 0;
+		}
+		else
+		{
+			s7_tt[s7_i][24] = (s7_tt[s7_i][23] - s7_tt[s7_i - 1][23]) * s7_tt[s7_i - 1][6] + s7_tt[s7_i - 1][24];
+		}
+	}
+	for (s7_i = 1; s7_i <= s7_nsm; s7_i = s7_i + (1))
+	{
+		s7_qq = s7_tt[s7_i][6];
+		s7_tt[s7_i][25] = s7_qq * s7_tt[s7_i][15] - s7_tt[s7_i][20];
+		s7_tt[s7_i][26] = s7_qq * s7_tt[s7_i][16] - s7_tt[s7_i][21];
+		s7_tt[s7_i][27] = 2 * s7_qq * s7_tt[s7_i][16] - s7_tt[s7_i][22];
+		s7_tt[s7_i][28] = s7_qq * s7_tt[s7_i][17] - 2 * s7_tt[s7_i][23];
+		s7_tt[s7_i][29] = s7_qq * s7_tt[s7_i][18] - s7_tt[s7_i][23];
+		s7_tt[s7_i][30] = s7_qq * s7_tt[s7_i][19] - s7_tt[s7_i][24];
+		s7_tt[s7_i][31] = -s7_qq * s7_tt[s7_i][25] + s7_tt[s7_i][26];
+		s7_tt[s7_i][32] = -s7_qq * s7_tt[s7_i][27] + s7_tt[s7_i][28];
+		s7_tt[s7_i][33] = -s7_qq * s7_tt[s7_i][29] + s7_tt[s7_i][30];
+	}
+	for (s7_i = 1; s7_i <= s7_nsm; s7_i = s7_i + (1))
+	{
+		s7_kk = s7_tt[s7_i][159];
+		s7_t2s = s7_tt[s7_i][156];
+		s7_t9s = s7_t2s * s7_t2s;
+		s7_tt[s7_i][34] = ((s7_kk * s7_kk + 1) * s7_tt[s7_i][3] * s7_tt[s7_i][3] + s7_t9s - 3 * s7_tt[s7_i][9]) / 8;
+		s7_tt[s7_i][35] = (s7_kk - 1) * s7_tt[s7_i][2] * s7_tt[s7_i][3];
+		s7_tt[s7_i][36] = 0.5 * (-s7_kk * s7_tt[s7_i][3] * s7_tt[s7_i][3] - s7_tt[s7_i][9] + 8 * s7_tt[s7_i][34] + 3 * s7_tt[s7_i][35]);
+		s7_tt[s7_i][37] = 2 * s7_tt[s7_i][9] + 8 * s7_tt[s7_i][34] + 5 * s7_tt[s7_i][35] - s7_tt[s7_i][36];
+		s7_tt[s7_i][43] = (s7_t2s - 3 * s7_tt[s7_i][2]) * s7_tt[s7_i][7] * s7_tt[s7_i][10];
+		s7_tt[s7_i][48] = 0.5 * s7_tt[s7_i][7] * s7_tt[s7_i][7] * s7_tt[s7_i][10];
+		s7_tt[s7_i][49] = 0.25 * (s7_t9s - s7_tt[s7_i][9]) * s7_t2s * s7_tt[s7_i][7];
+		s7_tt[s7_i][58] = 0.5 * s7_tt[s7_i][8] * s7_tt[s7_i][8];
+		s7_tt[s7_i][64] = s7_tt[s7_i][7] * s7_tt[s7_i][7] * s7_tt[s7_i][8] / 8;
+		s7_tt[s7_i][81] = s7_tt[s7_i][2] * s7_tt[s7_i][5];
+		s7_tt[s7_i][82] = s7_tt[s7_i][5] * s7_tt[s7_i][5];
+	}
+	return (0);
+}
+
+static int
+s7_part4()
+{
+	for (s7_i = 1; s7_i <= s7_nsm; s7_i = s7_i + (1))
+	{
+		s7_qr = s7_tt[s7_i][6];
+		s7_ss1 = 3 * s7_tt[s7_i][10] * s7_tt[s7_i][34];
+		s7_ss2 = 4 * s7_qr * s7_ss1 + s7_tt[s7_i][43];
+		s7_ss3 = 0.5 * s7_qr * (s7_tt[s7_i][43] + s7_ss2) + s7_tt[s7_i][48] + s7_tt[s7_i][49];
+		s7_ss4 = 2 * (s7_ss3 - 2 * s7_tt[s7_i][48] - s7_tt[s7_i][49]);
+		s7_ss5 = (-s7_qr * s7_ss2 + 2 * s7_ss3 + s7_ss4 - 2 * s7_tt[s7_i][48]) * s7_qr + s7_tt[s7_i][58];
+		s7_ss6 = 0.5 * (0.25 * (2 * s7_tt[s7_i][49] - 2 * s7_ss3 - s7_ss4) * s7_qr + s7_tt[s7_i][58] + s7_ss5) * s7_qr + s7_tt[s7_i][64];
+		s7_tt[s7_i][38] = s7_ss1;
+		s7_tt[s7_i][44] = s7_ss2;
+		s7_tt[s7_i][50] = s7_ss3;
+		s7_tt[s7_i][54] = s7_ss4;
+		s7_tt[s7_i][59] = s7_ss5;
+		s7_tt[s7_i][65] = s7_ss6;
+		s7_aa = s7_tt[s7_i][10];
+		s7_abq = s7_tt[s7_i][11];
+		s7_q2a = s7_tt[s7_i][12] / 2;
+		s7_cc13 = s7_tt[s7_i][13];
+		s7_qcc = s7_tt[s7_i][14];
+		s7_qom = (s7_tt[s7_i][159] - 1) * s7_tt[s7_i][158] * (s7_tt[s7_i][6] * s7_tt[s7_i][3]) / s7_tt[s7_i][160];
+		s7_d1 = s7_tt[s7_i][25];
+		s7_d2 = s7_tt[s7_i][26];
+		s7_d3 = s7_tt[s7_i][27];
+		s7_d4 = s7_tt[s7_i][28];
+		s7_d5 = s7_tt[s7_i][29];
+		s7_d6 = s7_tt[s7_i][30];
+		s7_d7 = s7_tt[s7_i][31];
+		s7_d8 = s7_tt[s7_i][32];
+		s7_d9 = s7_tt[s7_i][33];
+		s7_u1 = s7_ss1 + 3 * s7_aa * s7_d1;
+		s7_v1 = s7_qr * s7_ss1 + 3 * s7_abq * s7_d1;
+		s7_tt[s7_i][41] = s7_u1;
+		s7_tt[s7_i][42] = s7_aa * s7_d7 + s7_v1;
+		s7_u2m = 2 * (s7_abq * s7_d1 + (s7_d2 + s7_d3) * s7_aa) - s7_tt[s7_i][8] * s7_tt[s7_i][15] + s7_ss2;
+		s7_v2m = 2 * (s7_q2a * s7_d1 + (s7_d2 + s7_d3) * s7_abq) - s7_qom * s7_tt[s7_i][15] + s7_qr * s7_ss2;
+		s7_tt[s7_i][45] = s7_u2m;
+		s7_u2 = 2 * s7_abq * s7_d1 + s7_aa * s7_d3 + s7_u2m;
+		s7_v2 = 2 * s7_q2a * s7_d1 + s7_abq * s7_d3 + s7_v2m;
+		s7_tt[s7_i][46] = s7_u2;
+		s7_tt[s7_i][47] = 2 * s7_abq * s7_d7 + s7_aa * s7_d8 + s7_v2;
+		s7_u3m = 2 * (s7_abq * s7_d2 + s7_d5 * s7_aa) - s7_tt[s7_i][8] * s7_tt[s7_i][16] + s7_ss3;
+		s7_v3m = 2 * (s7_q2a * s7_d2 + s7_d5 * s7_abq) - s7_qom * s7_tt[s7_i][16] + s7_qr * s7_ss3;
+		s7_tt[s7_i][51] = s7_u3m;
+		s7_u3 = s7_cc13 * s7_d1 + s7_aa * s7_d5 + s7_u3m;
+		s7_v3 = s7_qcc * s7_d1 + s7_abq * s7_d5 + s7_v3m;
+		s7_tt[s7_i][52] = s7_u3;
+		s7_tt[s7_i][53] = s7_aa * s7_d9 + s7_cc13 * s7_d7 + s7_v3;
+		s7_u4m = 2 * (s7_u3m - s7_ss3) + s7_ss4;
+		s7_v4m = 2 * (s7_v3m - s7_qr * s7_ss3) + s7_qr * s7_ss4;
+		s7_tt[s7_i][55] = s7_u4m;
+		s7_u4 = 2 * s7_abq * s7_d3 + s7_u4m;
+		s7_v4 = 2 * s7_q2a * s7_d3 + s7_v4m;
+		s7_tt[s7_i][56] = s7_u4;
+		s7_tt[s7_i][57] = 2 * s7_abq * s7_d8 + s7_v4;
+		s7_u5m = -(s7_tt[s7_i][17] + s7_tt[s7_i][18]) * s7_tt[s7_i][8] + s7_ss5 + 2 * (s7_abq * (s7_d4 + s7_d5) + s7_d6 * s7_aa);
+		s7_v5m = -(s7_tt[s7_i][17] + s7_tt[s7_i][18]) * s7_qom + s7_qr * s7_ss5 + 2 * (s7_q2a * (s7_d4 + s7_d5) + s7_d6 * s7_abq);
+		s7_tt[s7_i][61] = s7_u5m;
+		s7_u5 = 2 * s7_abq * s7_d5 + s7_cc13 * s7_d3 + s7_u5m;
+		s7_v5 = 2 * s7_q2a * s7_d5 + s7_qcc * s7_d3 + s7_v5m;
+		s7_tt[s7_i][62] = s7_u5;
+		s7_tt[s7_i][63] = 2 * s7_abq * s7_d9 + s7_cc13 * s7_d8 + s7_v5;
+		s7_u6m = 2 * (s7_cc13 * s7_tt[s7_i][19] - s7_abq * s7_tt[s7_i][24]) + s7_ss6;
+		s7_v6m = 2 * (s7_qcc * s7_tt[s7_i][19] - s7_q2a * s7_tt[s7_i][24]) + s7_qr * s7_ss6;
+		s7_tt[s7_i][66] = s7_u6m;
+		s7_u6 = s7_cc13 * s7_d5 + s7_u6m;
+		s7_v6 = s7_qcc * s7_d5 + s7_v6m;
+		s7_tt[s7_i][67] = s7_u6;
+		s7_tt[s7_i][68] = s7_cc13 * s7_d9 + s7_v6;
+		s7_tt[s7_i][39] = 2 * s7_tt[s7_i][10] * s7_tt[s7_i][25];
+		s7_tt[s7_i][40] = s7_tt[s7_i][38] + s7_tt[s7_i][39];
+	}
+	for (s7_i = 1; s7_i <= s7_nsm; s7_i = s7_i + (1))
+	{
+		for (s7_j = 69; s7_j <= 80; s7_j = s7_j + (1))
+		{
+			s7_tt[s7_i][s7_j] = 0;
+		}
+		if (s7_i > 1)
+		{
+			for (s7_m = 1; s7_m <= s7_i - 1; s7_m = s7_m + (1))
+			{
+				s7_tt[s7_i][69] = s7_tt[s7_i][69] + s7_tt[s7_m][41];
+				s7_tt[s7_i][70] = s7_tt[s7_i][70] + s7_tt[s7_m][42];
+				s7_tt[s7_i][71] = s7_tt[s7_i][71] + s7_tt[s7_m][46];
+				s7_tt[s7_i][72] = s7_tt[s7_i][72] + s7_tt[s7_m][47];
+				s7_tt[s7_i][73] = s7_tt[s7_i][73] + s7_tt[s7_m][52];
+				s7_tt[s7_i][74] = s7_tt[s7_i][74] + s7_tt[s7_m][53];
+				s7_tt[s7_i][75] = s7_tt[s7_i][75] + s7_tt[s7_m][56];
+				s7_tt[s7_i][76] = s7_tt[s7_i][76] + s7_tt[s7_m][57];
+				s7_tt[s7_i][77] = s7_tt[s7_i][77] + s7_tt[s7_m][62];
+				s7_tt[s7_i][78] = s7_tt[s7_i][78] + s7_tt[s7_m][63];
+				s7_tt[s7_i][79] = s7_tt[s7_i][79] + s7_tt[s7_m][67];
+				s7_tt[s7_i][80] = s7_tt[s7_i][80] + s7_tt[s7_m][68];
+			}
+		}
+	}
+	for (s7_i = 1; s7_i <= s7_nsm; s7_i = s7_i + (1))
+	{
+		s7_tt[s7_i][83] = s7_tt[s7_i][16] - s7_tt[s7_i][20];
+		s7_tt[s7_i][84] = s7_tt[s7_i][17] - s7_tt[s7_i][22];
+		s7_tt[s7_i][85] = s7_tt[s7_i][19] - s7_tt[s7_i][23];
+		s7_tt[s7_i][86] = -1.5 * s7_tt[s7_i][83] * s7_tt[s7_i][83] + s7_tt[s7_i][9] * s7_tt[s7_i][16] - s7_tt[s7_i][16] * s7_tt[s7_i][20];
+		s7_tt[s7_i][86] = s7_tt[s7_i][86] + s7_tt[s7_i][15] * s7_tt[s7_i][21] - s7_tt[s7_i][15] * s7_tt[s7_i][81] + s7_tt[s7_i][70];
+		s7_tt[s7_i][87] = (2 * s7_tt[s7_i][21] - s7_tt[s7_i][22] - s7_tt[s7_i][81]) * s7_tt[s7_i][16];
+		s7_tt[s7_i][87] = s7_tt[s7_i][87] + s7_tt[s7_i][9] * s7_tt[s7_i][21] - s7_tt[s7_i][20] * s7_tt[s7_i][81];
+		s7_tt[s7_i][88] = (2 * s7_tt[s7_i][23] - s7_tt[s7_i][82]) * s7_tt[s7_i][15] - s7_tt[s7_i][17] * s7_tt[s7_i][20] + s7_tt[s7_i][9] * s7_tt[s7_i][17];
+		s7_tt[s7_i][89] = -3 * s7_tt[s7_i][83] * s7_tt[s7_i][84] + s7_tt[s7_i][87] + s7_tt[s7_i][88] + s7_tt[s7_i][72];
+		s7_tt[s7_i][90] = -0.5 * s7_tt[s7_i][81] * s7_tt[s7_i][84] + s7_tt[s7_i][9] * s7_tt[s7_i][19] - s7_tt[s7_i][20] * s7_tt[s7_i][82];
+		s7_tt[s7_i][91] = s7_tt[s7_i][18] * s7_tt[s7_i][21] + s7_tt[s7_i][15] * s7_tt[s7_i][24] - s7_tt[s7_i][16] * s7_tt[s7_i][23] - s7_tt[s7_i][19] * s7_tt[s7_i][20];
+		s7_tt[s7_i][92] = -3 * s7_tt[s7_i][83] * s7_tt[s7_i][85] + s7_tt[s7_i][74] + s7_tt[s7_i][90] + s7_tt[s7_i][91];
+		s7_tt[s7_i][93] = 2 * (2 * s7_tt[s7_i][16] * s7_tt[s7_i][23] - s7_tt[s7_i][16] * s7_tt[s7_i][82] + s7_tt[s7_i][9] * s7_tt[s7_i][23]);
+		s7_tt[s7_i][93] = s7_tt[s7_i][93] - s7_tt[s7_i][17] * s7_tt[s7_i][22];
+		s7_tt[s7_i][94] = -1.5 * s7_tt[s7_i][84] * s7_tt[s7_i][84] + s7_tt[s7_i][81] * s7_tt[s7_i][84] + s7_tt[s7_i][76] + s7_tt[s7_i][93];
+		s7_tt[s7_i][95] = (2 * s7_tt[s7_i][18] - s7_tt[s7_i][17] + s7_tt[s7_i][81]) * s7_tt[s7_i][23];
+		s7_tt[s7_i][95] = s7_tt[s7_i][95] + s7_tt[s7_i][19] * s7_tt[s7_i][81] - s7_tt[s7_i][22] * s7_tt[s7_i][82];
+		s7_tt[s7_i][96] = (2 * s7_tt[s7_i][16] + s7_tt[s7_i][9]) * s7_tt[s7_i][24] - s7_tt[s7_i][19] * s7_tt[s7_i][22] - s7_tt[s7_i][18] * s7_tt[s7_i][82];
+		s7_tt[s7_i][97] = -3 * s7_tt[s7_i][84] * s7_tt[s7_i][85] + s7_tt[s7_i][95] + s7_tt[s7_i][96] + s7_tt[s7_i][78];
+		s7_tt[s7_i][98] = -1.5 * s7_tt[s7_i][85] * s7_tt[s7_i][85] + s7_tt[s7_i][24] * s7_tt[s7_i][81] + s7_tt[s7_i][18] * s7_tt[s7_i][24];
+		s7_tt[s7_i][98] = s7_tt[s7_i][98] - s7_tt[s7_i][23] * s7_tt[s7_i][82] - s7_tt[s7_i][19] * s7_tt[s7_i][23] + s7_tt[s7_i][80];
+	}
+	return (0);
+}
+
+static int
+s7_part5()
+{
+	for (s7_i = 1; s7_i <= s7_nsm; s7_i = s7_i + (1))
+	{
+		s7_cvn = cv[s7_i] * s7_efl;
+		s7_t2s = s7_tt[s7_i][156];
+		s7_t9s = s7_t2s * s7_t2s;
+		s7_t81s = s7_t2s * s7_tt[s7_i][157];
+		s7_qr = s7_tt[s7_i][6];
+		if (s7_i > 1)
+		{
+			s7_p6 = s7_tt[s7_i - 1][6];
+			s7_p31 = s7_tt[s7_i - 1][31];
+			s7_p32 = s7_tt[s7_i - 1][32];
+			s7_p33 = s7_tt[s7_i - 1][33];
+			s7_p70 = s7_tt[s7_i - 1][70];
+			s7_p72 = s7_tt[s7_i - 1][72];
+			s7_p74 = s7_tt[s7_i - 1][74];
+			s7_p76 = s7_tt[s7_i - 1][76];
+			s7_p78 = s7_tt[s7_i - 1][78];
+			s7_p80 = s7_tt[s7_i - 1][80];
+			s7_p86 = s7_tt[s7_i - 1][86];
+			s7_p89 = s7_tt[s7_i - 1][89];
+			s7_p92 = s7_tt[s7_i - 1][92];
+			s7_p94 = s7_tt[s7_i - 1][94];
+			s7_p97 = s7_tt[s7_i - 1][97];
+			s7_p98 = s7_tt[s7_i - 1][98];
+			s7_p80 = s7_tt[s7_i - 1][80];
+			s7_p98 = s7_tt[s7_i - 1][98];
+			s7_p99 = s7_tt[s7_i - 1][99];
+			s7_p100 = s7_tt[s7_i - 1][100];
+			s7_p102 = s7_tt[s7_i - 1][102];
+			s7_p104 = s7_tt[s7_i - 1][104];
+			s7_p107 = s7_tt[s7_i - 1][107];
+			s7_p109 = s7_tt[s7_i - 1][109];
+			s7_p112 = s7_tt[s7_i - 1][112];
+			s7_p114 = s7_tt[s7_i - 1][114];
+		}
+		else
+		{
+			s7_p6 = 0;
+			s7_p31 = 0;
+			s7_p32 = 0;
+			s7_p33 = 0;
+			s7_p70 = 0;
+			s7_p72 = 0;
+			s7_p74 = 0;
+			s7_p76 = 0;
+			s7_p78 = 0;
+			s7_p80 = 0;
+			s7_p86 = 0;
+			s7_p89 = 0;
+			s7_p92 = 0;
+			s7_p94 = 0;
+			s7_p97 = 0;
+			s7_p98 = 0;
+			s7_p80 = 0;
+			s7_p98 = 0;
+			s7_p99 = 0;
+			s7_p100 = 0;
+			s7_p102 = 0;
+			s7_p104 = 0;
+			s7_p107 = 0;
+			s7_p109 = 0;
+			s7_p112 = 0;
+			s7_p114 = 0;
+		}
+		s7_tcar = s7_p6 * (-0.5 * s7_p33 * s7_p100 - s7_p80 + s7_p98 - s7_tt[s7_i][98]);
+		s7_tt[s7_i][99] = 0.5 * (s7_tt[s7_i][9] - s7_t9s) + s7_tt[s7_i][11];
+		s7_tt[s7_i][100] = s7_tt[s7_i][81] - s7_t81s + s7_tt[s7_i][12];
+		s7_tt[s7_i][101] = s7_tt[s7_i][6] * s7_tt[s7_i][69] - s7_tt[s7_i][86];
+		s7_tt[s7_i][102] = -s7_p6 * (s7_p70 - s7_p86 + s7_tt[s7_i][86]) + s7_tt[s7_i][6] * s7_tt[s7_i][70] - s7_p31 * s7_p99 + s7_p102;
+		s7_tt[s7_i][103] = s7_tt[s7_i][6] * s7_tt[s7_i][71] - s7_tt[s7_i][89];
+		s7_tt[s7_i][104] = -s7_p6 * (s7_p72 - s7_p89 + s7_tt[s7_i][89]) + s7_tt[s7_i][6] * s7_tt[s7_i][72] - s7_p31 * s7_p100 - s7_p32 * s7_p99 + s7_p104;
+		s7_tt[s7_i][105] = s7_tt[s7_i][6] * s7_tt[s7_i][73] - s7_tt[s7_i][92];
+		s7_tt[s7_i][106] = -0.5 * s7_p100 * s7_p31 * s7_p6 + s7_tt[s7_i][74] * s7_tt[s7_i][6] - s7_p33 * s7_p99;
+		s7_tt[s7_i][107] = -s7_p6 * (s7_p74 - s7_p92 + s7_tt[s7_i][92]) + s7_tt[s7_i][106] + s7_p107;
+		s7_tt[s7_i][108] = s7_tt[s7_i][6] * s7_tt[s7_i][75] - s7_tt[s7_i][94];
+		s7_tt[s7_i][109] = -s7_p6 * (s7_p76 - s7_p94 + s7_tt[s7_i][94]) - s7_p32 * s7_p100 + s7_tt[s7_i][6] * s7_tt[s7_i][76] + s7_p109;
+		s7_tt[s7_i][110] = s7_tt[s7_i][6] * s7_tt[s7_i][77] - s7_tt[s7_i][97];
+		s7_tt[s7_i][111] = -((0.5 * s7_p6 * s7_p32 + s7_p33) * s7_p100) + s7_tt[s7_i][6] * s7_tt[s7_i][78];
+		s7_tt[s7_i][112] = -s7_p6 * (s7_p78 - s7_p97 + s7_tt[s7_i][97]) + s7_tt[s7_i][111] + s7_p112;
+		s7_tt[s7_i][113] = s7_tt[s7_i][6] * s7_tt[s7_i][79] - s7_tt[s7_i][98];
+		s7_tt[s7_i][114] = s7_tcar + s7_tt[s7_i][6] * s7_tt[s7_i][80] + s7_p114;
+		s7_tt[s7_i][115] = -s7_tt[s7_i][6] * s7_tt[s7_i][101] + s7_tt[s7_i][102];
+		s7_tt[s7_i][116] = -s7_tt[s7_i][6] * s7_tt[s7_i][103] + s7_tt[s7_i][104];
+		s7_tt[s7_i][117] = -s7_tt[s7_i][6] * s7_tt[s7_i][105] + s7_tt[s7_i][107];
+		s7_tt[s7_i][118] = -s7_tt[s7_i][6] * s7_tt[s7_i][108] + s7_tt[s7_i][109];
+		s7_tt[s7_i][119] = -s7_tt[s7_i][6] * s7_tt[s7_i][110] + s7_tt[s7_i][112];
+		s7_tt[s7_i][120] = -s7_tt[s7_i][6] * s7_tt[s7_i][113] + s7_tt[s7_i][114];
+		s7_tt[s7_i][121] = (0.25 * (2.0 * s7_t2s - 5.0 * s7_tt[s7_i][2]) * s7_tt[s7_i][7] * s7_tt[s7_i][10] + 10.0 * s7_tt[s7_i][34] * s7_tt[s7_i][34]) * s7_tt[s7_i][10];
+		s7_tt[s7_i][122] = 0.5 * ((s7_t2s - s7_tt[s7_i][3]) * s7_cvn * s7_tt[s7_i][1] * s7_tt[s7_i][2] * s7_tt[s7_i][7] * s7_tt[s7_i][10] + 10.0 * s7_tt[s7_i][34] * s7_tt[s7_i][43]);
+		s7_tt[s7_i][123] = ((2.0 * s7_tt[s7_i][34] + 0.5 * s7_tt[s7_i][36] - 0.75 * s7_tt[s7_i][35]) * s7_tt[s7_i][35] - s7_tt[s7_i][34] * s7_tt[s7_i][37]) * 0.75 * s7_tt[s7_i][8];
+		s7_tt[s7_i][124] = (5.0 * s7_tt[s7_i][9] - 10.0 * s7_tt[s7_i][34] + 2.0 * s7_tt[s7_i][36]) * 0.25 * s7_tt[s7_i][48];
+		s7_tt[s7_i][125] = -0.5 * (s7_tt[s7_i][2] + s7_t2s) * s7_tt[s7_i][7] * s7_tt[s7_i][8] * s7_tt[s7_i][36];
+		s7_tt[s7_i][126] = 2.0 * (s7_tt[s7_i][9] + s7_tt[s7_i][34] - 5.0 * s7_tt[s7_i][35] / 4.0) * s7_tt[s7_i][64];
+		s7_tt[s7_i][127] = -s7_tt[s7_i][7] * s7_tt[s7_i][7] * s7_tt[s7_i][43];
+		s7_tt[s7_i][128] = -2.0 * (4.0 * s7_tt[s7_i][34] + 5.0 * s7_tt[s7_i][35] - 2.0 * s7_tt[s7_i][9]) * s7_tt[s7_i][64];
+		s7_tt[s7_i][129] = -0.75 * s7_tt[s7_i][7] * s7_tt[s7_i][7] * s7_tt[s7_i][58];
+		s7_tt[s7_i][130] = -0.5 * s7_tt[s7_i][7] * s7_tt[s7_i][7] * s7_tt[s7_i][64];
+		s7_tt[s7_i][134] = 6.0 * s7_tt[s7_i][6] * s7_tt[s7_i][121] + s7_tt[s7_i][122];
+		s7_tt[s7_i][136] = 0.5 * (s7_tt[s7_i][134] + s7_tt[s7_i][122]) * s7_tt[s7_i][6] + s7_tt[s7_i][123] + s7_tt[s7_i][124];
+		s7_tt[s7_i][138] = 4.0 * (s7_tt[s7_i][136] - s7_tt[s7_i][123] + s7_tt[s7_i][124]);
+		s7_tt[s7_i][140] = (-2.0 * s7_tt[s7_i][6] * s7_tt[s7_i][134] + 4.0 * s7_tt[s7_i][136] + s7_tt[s7_i][138] + 8.0 * s7_tt[s7_i][124]) * s7_tt[s7_i][6] + s7_tt[s7_i][125];
+		s7_tt[s7_i][143] = ((s7_tt[s7_i][123] + s7_tt[s7_i][124] - s7_tt[s7_i][136]) * s7_tt[s7_i][6] + 0.5 * s7_tt[s7_i][140] + 0.5 * s7_tt[s7_i][125]) * s7_tt[s7_i][6] + s7_tt[s7_i][126];
+		s7_tt[s7_i][145] = (2.0 / 3.0) * (4.0 * (s7_tt[s7_i][124] - s7_tt[s7_i][123]) * s7_tt[s7_i][6] + s7_tt[s7_i][140] - s7_tt[s7_i][125]) + s7_tt[s7_i][127];
+		s7_tt[s7_i][147] = (4.0 * (s7_tt[s7_i][124] - s7_tt[s7_i][123]) * s7_tt[s7_i][6] + 3.0 * s7_tt[s7_i][127] - 2.0 * s7_tt[s7_i][125]) * s7_tt[s7_i][6] + s7_tt[s7_i][128] - 4.0 * s7_tt[s7_i][126] + 4.0 * s7_tt[s7_i][143];
+		s7_tt[s7_i][149] = ((4.0 * s7_tt[s7_i][6] * s7_tt[s7_i][124] + s7_tt[s7_i][125] + 0.75 * s7_tt[s7_i][127] - 0.75 * s7_tt[s7_i][145]) * s7_tt[s7_i][6] + s7_tt[s7_i][147] + 2.0 * s7_tt[s7_i][126] + s7_tt[s7_i][128]) * s7_tt[s7_i][6] + s7_tt[s7_i][129];
+		s7_tt[s7_i][151] = ((s7_tt[s7_i][6] * s7_tt[s7_i][121] + s7_tt[s7_i][122]) * s7_tt[s7_i][6] + s7_tt[s7_i][123] + 9.0 * s7_tt[s7_i][124]) * s7_tt[s7_i][6] + s7_tt[s7_i][125] + s7_tt[s7_i][127];
+		s7_tt[s7_i][152] = ((s7_tt[s7_i][6] * s7_tt[s7_i][151] + s7_tt[s7_i][126] + s7_tt[s7_i][128]) * s7_tt[s7_i][6] + s7_tt[s7_i][129]) * s7_tt[s7_i][6] + s7_tt[s7_i][130];
+		s7_tt[s7_i][131] = 4.0 * ((-s7_tt[s7_i][8] * s7_tt[s7_i][15] + 2.0 * s7_tt[s7_i][44]) * 0.125 * s7_tt[s7_i][15] - s7_tt[s7_i][20] * s7_tt[s7_i][38]);
+		s7_tt[s7_i][132] = (s7_tt[s7_i][25] * s7_tt[s7_i][25] + 3.0 * s7_tt[s7_i][101]) * s7_tt[s7_i][10] + s7_tt[s7_i][25] * s7_tt[s7_i][40] + s7_tt[s7_i][121] + s7_tt[s7_i][131];
+		s7_tt[s7_i][133] = s7_tt[s7_i][6] * s7_tt[s7_i][132] + s7_tt[s7_i][10] * s7_tt[s7_i][115] + s7_tt[s7_i][31] * s7_tt[s7_i][40];
+		s7_tt[s7_i][135] = s7_tt[s7_i][134];
+		s7_tt[s7_i][135] = s7_tt[s7_i][135] + 4.0 * (0.5 * (s7_tt[s7_i][26] + s7_tt[s7_i][27]) * s7_tt[s7_i][25] + s7_qr * s7_tt[s7_i][101] + 0.5 * s7_tt[s7_i][102] + 0.75 * s7_tt[s7_i][103]) * s7_tt[s7_i][10];
+		s7_tt[s7_i][135] = s7_tt[s7_i][135] + 3.0 * (-(s7_tt[s7_i][15] * s7_tt[s7_i][16] + s7_tt[s7_i][69] / 3.0) * s7_tt[s7_i][8] + s7_tt[s7_i][44] * s7_tt[s7_i][83]) + 2.0 * (s7_tt[s7_i][50] + s7_tt[s7_i][54]) * s7_tt[s7_i][15];
+		s7_tt[s7_i][135] = s7_tt[s7_i][135] + s7_tt[s7_i][25] * s7_tt[s7_i][45] + s7_tt[s7_i][27] * s7_tt[s7_i][40] - 4.0 * (s7_tt[s7_i][21] + s7_tt[s7_i][22]) * s7_tt[s7_i][38];
+		s7_tt[s7_i][137] = s7_tt[s7_i][136];
+		s7_tt[s7_i][137] = s7_tt[s7_i][137] + (2.0 * (s7_qr * s7_tt[s7_i][102] + s7_tt[s7_i][25] * s7_tt[s7_i][29]) + s7_tt[s7_i][26] * s7_tt[s7_i][26] + 3.0 * s7_tt[s7_i][105]) * s7_tt[s7_i][10];
+		s7_tt[s7_i][137] = s7_tt[s7_i][137] - (0.5 * s7_tt[s7_i][16] * s7_tt[s7_i][16] + s7_tt[s7_i][15] * s7_tt[s7_i][18] + s7_tt[s7_i][70]) * s7_tt[s7_i][8] + s7_tt[s7_i][25] * s7_tt[s7_i][51] + s7_tt[s7_i][29] * s7_tt[s7_i][40];
+		s7_tt[s7_i][137] = s7_tt[s7_i][137] + 2.0 * (-2.0 * s7_tt[s7_i][23] * s7_tt[s7_i][38] + s7_tt[s7_i][50] * s7_tt[s7_i][83]) + s7_tt[s7_i][15] * s7_tt[s7_i][59] + 0.5 * s7_tt[s7_i][44] * s7_tt[s7_i][84] + s7_tt[s7_i][13] * s7_tt[s7_i][101];
+		s7_tt[s7_i][139] = s7_tt[s7_i][138];
+		s7_tt[s7_i][139] = s7_tt[s7_i][139] + (2.0 * (2.0 * s7_qr * s7_tt[s7_i][103] + s7_tt[s7_i][25] * s7_tt[s7_i][28] + s7_tt[s7_i][26] * s7_tt[s7_i][27]) + s7_tt[s7_i][27] * s7_tt[s7_i][27] + 2.0 * s7_tt[s7_i][104] + 3.0 * s7_tt[s7_i][108]) * s7_tt[s7_i][10];
+		s7_tt[s7_i][139] = s7_tt[s7_i][139] - (4.0 * s7_tt[s7_i][16] * s7_tt[s7_i][16] + s7_tt[s7_i][15] * s7_tt[s7_i][17] + s7_tt[s7_i][71]) * s7_tt[s7_i][8] + 4.0 * (-2.0 * s7_tt[s7_i][23] * s7_tt[s7_i][38] + s7_tt[s7_i][16] * s7_tt[s7_i][50]);
+		s7_tt[s7_i][139] = s7_tt[s7_i][139] + s7_tt[s7_i][27] * s7_tt[s7_i][45] + s7_tt[s7_i][25] * s7_tt[s7_i][55] + 2.0 * ((3.0 * s7_tt[s7_i][16] - s7_tt[s7_i][20]) * s7_tt[s7_i][54] + s7_tt[s7_i][15] * s7_tt[s7_i][59]);
+		s7_tt[s7_i][139] = s7_tt[s7_i][139] + (s7_tt[s7_i][17] - 2.0 * s7_tt[s7_i][21] - 3.0 * s7_tt[s7_i][22]) * s7_tt[s7_i][44];
+		s7_tt[s7_i][141] = s7_tt[s7_i][140];
+		s7_tt[s7_i][141] = s7_tt[s7_i][141] + 2.0 * ((2.0 * s7_tt[s7_i][105] + s7_tt[s7_i][104]) * s7_qr + s7_tt[s7_i][107] + 1.5 * s7_tt[s7_i][110]) * s7_tt[s7_i][10] + s7_tt[s7_i][13] * s7_tt[s7_i][103];
+		s7_tt[s7_i][141] = s7_tt[s7_i][141] + 2.0 * ((s7_tt[s7_i][28] + s7_tt[s7_i][29]) * s7_tt[s7_i][26] + s7_tt[s7_i][25] * s7_tt[s7_i][30] + s7_tt[s7_i][27] * s7_tt[s7_i][29]) * s7_tt[s7_i][10];
+		s7_tt[s7_i][141] = s7_tt[s7_i][141] - ((3.0 * s7_tt[s7_i][18] + s7_tt[s7_i][17]) * s7_tt[s7_i][16] + s7_tt[s7_i][15] * s7_tt[s7_i][19] + s7_tt[s7_i][72] + s7_tt[s7_i][73]) * s7_tt[s7_i][8] + (s7_tt[s7_i][19] - 5.0 * s7_tt[s7_i][23]) * s7_tt[s7_i][44];
+		s7_tt[s7_i][141] = s7_tt[s7_i][141] + s7_tt[s7_i][29] * s7_tt[s7_i][45] + (3.0 * s7_tt[s7_i][50] + s7_tt[s7_i][54]) * s7_tt[s7_i][84] + s7_tt[s7_i][27] * s7_tt[s7_i][51] + (5.0 * s7_tt[s7_i][16] - s7_tt[s7_i][20]) * s7_tt[s7_i][59];
+		s7_tt[s7_i][141] = s7_tt[s7_i][141] + s7_tt[s7_i][25] * s7_tt[s7_i][61] + 4.0 * (s7_tt[s7_i][15] * s7_tt[s7_i][65] - s7_tt[s7_i][24] * s7_tt[s7_i][38]);
+		s7_tt[s7_i][144] = s7_tt[s7_i][143];
+		s7_tt[s7_i][144] = s7_tt[s7_i][144] + (2.0 * (s7_qr * s7_tt[s7_i][107] + s7_tt[s7_i][26] * s7_tt[s7_i][30]) + s7_tt[s7_i][29] * s7_tt[s7_i][29] + 3.0 * s7_tt[s7_i][113]) * s7_tt[s7_i][10];
+		s7_tt[s7_i][144] = s7_tt[s7_i][144] - (0.5 * s7_tt[s7_i][18] * s7_tt[s7_i][18] + s7_tt[s7_i][16] * s7_tt[s7_i][19] + s7_tt[s7_i][74]) * s7_tt[s7_i][8] + s7_tt[s7_i][29] * s7_tt[s7_i][51] + s7_tt[s7_i][25] * s7_tt[s7_i][66];
+		s7_tt[s7_i][144] = s7_tt[s7_i][144] + 2.0 * (2.0 * s7_tt[s7_i][16] * s7_tt[s7_i][65] + s7_tt[s7_i][50] * s7_tt[s7_i][85]) - s7_tt[s7_i][24] * s7_tt[s7_i][44] + s7_tt[s7_i][13] * s7_tt[s7_i][105] + 0.5 * s7_tt[s7_i][59] * s7_tt[s7_i][84];
+		s7_tt[s7_i][146] = s7_tt[s7_i][145];
+		s7_tt[s7_i][146] = s7_tt[s7_i][146] + 2.0 * ((2.0 * s7_qr * s7_tt[s7_i][108] + s7_tt[s7_i][27] * s7_tt[s7_i][28] + s7_tt[s7_i][109]) * s7_tt[s7_i][10] + s7_tt[s7_i][54] * s7_tt[s7_i][84]);
+		s7_tt[s7_i][146] = s7_tt[s7_i][146] - (2.0 * s7_tt[s7_i][16] * s7_tt[s7_i][17] + s7_tt[s7_i][75]) * s7_tt[s7_i][8] + s7_tt[s7_i][27] * s7_tt[s7_i][55] + 4.0 * (s7_tt[s7_i][16] * s7_tt[s7_i][59] - s7_tt[s7_i][23] * s7_tt[s7_i][44]);
+		s7_tt[s7_i][148] = s7_tt[s7_i][147];
+		s7_tt[s7_i][148] = s7_tt[s7_i][148] - ((0.5 * s7_tt[s7_i][17] + s7_tt[s7_i][18]) * s7_tt[s7_i][17] + s7_tt[s7_i][76] + s7_tt[s7_i][77]) * s7_tt[s7_i][8] + s7_tt[s7_i][13] * s7_tt[s7_i][108];
+		s7_tt[s7_i][148] = s7_tt[s7_i][148] + 2.0 * (-s7_tt[s7_i][8] * s7_tt[s7_i][16] + s7_tt[s7_i][54]) * s7_tt[s7_i][19] + s7_tt[s7_i][29] * s7_tt[s7_i][55] + s7_tt[s7_i][27] * s7_tt[s7_i][61];
+		s7_tt[s7_i][148] = s7_tt[s7_i][148] + (2.0 * ((2.0 * s7_tt[s7_i][110] + s7_tt[s7_i][109]) * s7_qr + s7_tt[s7_i][28] * s7_tt[s7_i][29] + s7_tt[s7_i][27] * s7_tt[s7_i][30] + s7_tt[s7_i][112]) + s7_tt[s7_i][28] * s7_tt[s7_i][28]) * s7_tt[s7_i][10];
+		s7_tt[s7_i][148] = s7_tt[s7_i][148] + 8.0 * (-0.25 * ((2.0 * s7_tt[s7_i][50] + 3.0 * s7_tt[s7_i][54]) * s7_tt[s7_i][23] + s7_tt[s7_i][24] * s7_tt[s7_i][44]) + s7_tt[s7_i][16] * s7_tt[s7_i][65]);
+		s7_tt[s7_i][148] = s7_tt[s7_i][148] + (3.0 * s7_tt[s7_i][17] + 2.0 * s7_tt[s7_i][18] - s7_tt[s7_i][22]) * s7_tt[s7_i][59];
+		s7_tt[s7_i][150] = s7_tt[s7_i][149];
+		s7_tt[s7_i][150] = s7_tt[s7_i][150] + 2.0 * ((2.0 * s7_tt[s7_i][113] + s7_tt[s7_i][112]) * s7_qr + s7_tt[s7_i][28] * s7_tt[s7_i][30] + s7_tt[s7_i][29] * s7_tt[s7_i][30] + s7_tt[s7_i][114]) * s7_tt[s7_i][10];
+		s7_tt[s7_i][150] = s7_tt[s7_i][150] - ((s7_tt[s7_i][17] + s7_tt[s7_i][18]) * s7_tt[s7_i][19] + s7_tt[s7_i][78] + s7_tt[s7_i][79]) * s7_tt[s7_i][8] + s7_tt[s7_i][13] * s7_tt[s7_i][110];
+		s7_tt[s7_i][150] = s7_tt[s7_i][150] + 4.0 * ((s7_tt[s7_i][17] + s7_tt[s7_i][18]) * s7_tt[s7_i][65] + 0.75 * s7_tt[s7_i][59] * s7_tt[s7_i][85]) + s7_tt[s7_i][29] * s7_tt[s7_i][61] + s7_tt[s7_i][27] * s7_tt[s7_i][66];
+		s7_tt[s7_i][150] = s7_tt[s7_i][150] - 2.0 * (s7_tt[s7_i][50] + s7_tt[s7_i][54]) * s7_tt[s7_i][24];
+		s7_tt[s7_i][153] = (2.0 * s7_qr * s7_tt[s7_i][114] + s7_tt[s7_i][30] * s7_tt[s7_i][30]) * s7_tt[s7_i][10] + s7_tt[s7_i][13] * s7_tt[s7_i][113];
+		s7_tt[s7_i][154] = -(0.5 * s7_tt[s7_i][19] * s7_tt[s7_i][19] + s7_tt[s7_i][80]) * s7_tt[s7_i][8] + s7_tt[s7_i][29] * s7_tt[s7_i][66] - s7_tt[s7_i][24] * s7_tt[s7_i][59];
+		s7_tt[s7_i][155] = 4.0 * s7_tt[s7_i][19] * s7_tt[s7_i][65] + s7_tt[s7_i][152] + s7_tt[s7_i][153] + s7_tt[s7_i][154];
+		s7_tt[s7_i][171] = s7_tt[s7_i][132];
+		s7_tt[s7_i][172] = s7_tt[s7_i][135];
+		s7_tt[s7_i][173] = s7_tt[s7_i][137];
+		s7_tt[s7_i][174] = s7_tt[s7_i][139];
+		s7_tt[s7_i][175] = s7_tt[s7_i][141];
+		s7_tt[s7_i][176] = s7_tt[s7_i][144];
+		s7_tt[s7_i][177] = s7_tt[s7_i][146];
+		s7_tt[s7_i][178] = s7_tt[s7_i][148];
+		s7_tt[s7_i][179] = s7_tt[s7_i][150];
+		s7_tt[s7_i][180] = s7_tt[s7_i][155];
+		s7_tt[s7_i][181] = s7_qr * s7_tt[s7_i][132] + s7_tt[s7_i][10] * s7_tt[s7_i][115] + s7_tt[s7_i][31] * s7_tt[s7_i][40];
+		s7_tt[s7_i][182] = s7_qr * (2 * s7_tt[s7_i][10] * s7_tt[s7_i][115] + s7_tt[s7_i][135]) + s7_tt[s7_i][10] * s7_tt[s7_i][116] + s7_tt[s7_i][31] * s7_tt[s7_i][45] + s7_tt[s7_i][32] * s7_tt[s7_i][40];
+		s7_tt[s7_i][183] = s7_qr * s7_tt[s7_i][137] + s7_tt[s7_i][10] * s7_tt[s7_i][117] + s7_tt[s7_i][13] * s7_tt[s7_i][115] + s7_tt[s7_i][31] * s7_tt[s7_i][51] + s7_tt[s7_i][33] * s7_tt[s7_i][40];
+		s7_tt[s7_i][184] = s7_qr * (2 * s7_tt[s7_i][116] * s7_tt[s7_i][10] + s7_tt[s7_i][139]) + s7_tt[s7_i][118] * s7_tt[s7_i][10] + s7_tt[s7_i][31] * s7_tt[s7_i][55] + s7_tt[s7_i][32] * s7_tt[s7_i][45];
+		s7_tt[s7_i][185] = s7_qr * (2 * s7_tt[s7_i][117] * s7_tt[s7_i][10] + s7_tt[s7_i][141]) + s7_tt[s7_i][119] * s7_tt[s7_i][10] + s7_tt[s7_i][13] * s7_tt[s7_i][116];
+		s7_tt[s7_i][185] = s7_tt[s7_i][185] + s7_tt[s7_i][31] * s7_tt[s7_i][61] + s7_tt[s7_i][32] * s7_tt[s7_i][51] + s7_tt[s7_i][33] * s7_tt[s7_i][45];
+		s7_tt[s7_i][186] = s7_qr * s7_tt[s7_i][144] + s7_tt[s7_i][10] * s7_tt[s7_i][120] + s7_tt[s7_i][13] * s7_tt[s7_i][117] + s7_tt[s7_i][31] * s7_tt[s7_i][66] + s7_tt[s7_i][33] * s7_tt[s7_i][51];
+		s7_tt[s7_i][187] = s7_qr * (2 * s7_tt[s7_i][10] * s7_tt[s7_i][118] + s7_tt[s7_i][146]) + s7_tt[s7_i][32] * s7_tt[s7_i][55];
+		s7_tt[s7_i][188] = s7_qr * (2 * s7_tt[s7_i][10] * s7_tt[s7_i][119] + s7_tt[s7_i][148]) + s7_tt[s7_i][13] * s7_tt[s7_i][118] + s7_tt[s7_i][32] * s7_tt[s7_i][61] + s7_tt[s7_i][33] * s7_tt[s7_i][55];
+		s7_tt[s7_i][189] = s7_qr * (2 * s7_tt[s7_i][10] * s7_tt[s7_i][120] + s7_tt[s7_i][150]) + s7_tt[s7_i][13] * s7_tt[s7_i][119] + s7_tt[s7_i][32] * s7_tt[s7_i][66] + s7_tt[s7_i][33] * s7_tt[s7_i][61];
+		s7_tt[s7_i][190] = s7_qr * s7_tt[s7_i][155] + s7_tt[s7_i][13] * s7_tt[s7_i][120] + s7_tt[s7_i][33] * s7_tt[s7_i][66];
+		s7_tt[s7_i][191] = s7_tt[s7_i][121];
+		s7_tt[s7_i][192] = s7_tt[s7_i][134];
+		s7_tt[s7_i][193] = s7_tt[s7_i][136];
+		s7_tt[s7_i][194] = s7_tt[s7_i][138];
+		s7_tt[s7_i][195] = s7_tt[s7_i][140];
+		s7_tt[s7_i][196] = s7_tt[s7_i][143];
+		s7_tt[s7_i][197] = s7_tt[s7_i][145];
+		s7_tt[s7_i][198] = s7_tt[s7_i][147];
+		s7_tt[s7_i][199] = s7_tt[s7_i][149];
+		s7_tt[s7_i][200] = s7_tt[s7_i][152];
+	}
+	if (s7_dbg == 1)
+	{
+		strcat(bs_ln, " "); bs_out();
+		strcat(bs_ln, "Table I entries. The reference file macros/reference/CookeTriplet_TableI.txt"); bs_out();
+		strcat(bs_ln, "is the CookeTriplet at INFINITE conjugate; move the object and these change,"); bs_out();
+		strcat(bs_ln, "which is the point - t2 on surface one is iota."); bs_out();
+		for (s7_j = 1; s7_j <= 155; s7_j = s7_j + (1))
+		{
+			strcat(bs_ln, "t"); sprintf(bs_tmp, "%4.0f", 1.0*(s7_j)); strcat(bs_ln, bs_tmp);
+			for (s7_i = 1; s7_i <= s7_nsm; s7_i = s7_i + (1))
+			{
+				sprintf(bs_tmp, "%20.9e", 1.0*(s7_tt[s7_i][s7_j])); strcat(bs_ln, bs_tmp);
+			}
+			strcat(bs_ln, " "); bs_out();
+		}
+	}
+	s7_epr = s7_vec2[2] + s7_epp * s7_vec2[501];
+	return (0);
+}
+
+static int
+s7_part6()
+{
+	s7_um = -(s7_epr / s7_efl) / s7_goe;
+	if (s7_finite == 1)
+	{
+		s7_hobj = s7_vec3[2] - s7_objd * s7_vec3[501];
+		s7_hmax = -s7_hobj / s7_objd;
+	}
+	else
+	{
+		s7_hmax = fabs(s7_vec3[501]);
+	}
+	if (fabs(s7_hmax) < s7_eps)
+	{
+		strcat(bs_ln, "The chief ray carries no field, so the field variable cannot be recovered."); bs_out();
+		strcat(bs_ln, "Is the field zero?"); bs_out();
+		s7_stop = 1; return (0);
+	}
+	s7_hmax = s7_hmax * s7_n0abs;
+	s7_up2 = s7_um * s7_um;
+	s7_up3 = s7_up2 * s7_um;
+	s7_up4 = s7_up3 * s7_um;
+	s7_up5 = s7_up4 * s7_um;
+	s7_up6 = s7_up5 * s7_um;
+	s7_up7 = s7_up6 * s7_um;
+	s7_h2 = s7_hmax * s7_hmax;
+	s7_h3 = s7_h2 * s7_hmax;
+	s7_h4 = s7_h3 * s7_hmax;
+	s7_h5 = s7_h4 * s7_hmax;
+	s7_h6 = s7_h5 * s7_hmax;
+	s7_h7 = s7_h6 * s7_hmax;
+	s7_vpk = s7_tt[s7_nsm][156];
+	if (fabs(s7_vpk) < s7_eps)
+	{
+		strcat(bs_ln, "The p ray leaves the last surface parallel to the axis - the system is"); bs_out();
+		strcat(bs_ln, "afocal, and the seventh order cannot be put into transverse measure."); bs_out();
+		s7_stop = 1; return (0);
+	}
+	s7_efac = s7_efl / (s7_nlast * s7_vpk);
+	s7_vec1[1] = s7_efac * s7_up7;
+	s7_vec1[2] = s7_efac * s7_up6 * s7_hmax;
+	s7_vec1[3] = s7_vec1[2];
+	s7_vec1[4] = s7_efac * s7_up5 * s7_h2;
+	s7_vec1[5] = s7_vec1[4];
+	s7_vec1[6] = s7_vec1[4];
+	s7_vec1[7] = s7_efac * s7_up4 * s7_h3;
+	s7_vec1[8] = s7_vec1[7];
+	s7_vec1[9] = s7_vec1[7];
+	s7_vec1[10] = s7_vec1[7];
+	s7_vec1[11] = s7_efac * s7_up3 * s7_h4;
+	s7_vec1[12] = s7_vec1[11];
+	s7_vec1[13] = s7_vec1[11];
+	s7_vec1[14] = s7_vec1[11];
+	s7_vec1[15] = s7_efac * s7_up2 * s7_h5;
+	s7_vec1[16] = s7_vec1[15];
+	s7_vec1[17] = s7_vec1[15];
+	s7_vec1[18] = s7_efac * s7_um * s7_h6;
+	s7_vec1[19] = s7_vec1[18];
+	s7_vec1[20] = s7_efac * s7_h7;
+	for (s7_k = 21; s7_k <= 60; s7_k = s7_k + (1))
+	{
+		s7_vec1[s7_k] = 0;
+	}
+	for (s7_i = 1; s7_i <= s7_nsm; s7_i = s7_i + (1))
+	{
+		s7_qr = s7_tt[s7_i][6];
+		for (s7_half = 1; s7_half <= 2; s7_half = s7_half + (1))
+		{
+			if (s7_half == 1)
+			{
+				s7_gbase = 170;
+				s7_bbase = 180;
+				s7_bscl = 1;
+				s7_obase = 200;
+			}
+			else
+			{
+				s7_gbase = 190;
+				s7_bbase = 190;
+				s7_bscl = s7_qr;
+				s7_obase = 220;
+			}
+			s7_g1 = s7_tt[s7_i][s7_gbase + 1];
+			s7_g2 = s7_tt[s7_i][s7_gbase + 2];
+			s7_g3 = s7_tt[s7_i][s7_gbase + 3];
+			s7_g4 = s7_tt[s7_i][s7_gbase + 4];
+			s7_g5 = s7_tt[s7_i][s7_gbase + 5];
+			s7_g6 = s7_tt[s7_i][s7_gbase + 6];
+			s7_g7 = s7_tt[s7_i][s7_gbase + 7];
+			s7_g8 = s7_tt[s7_i][s7_gbase + 8];
+			s7_g9 = s7_tt[s7_i][s7_gbase + 9];
+			s7_g10 = s7_tt[s7_i][s7_gbase + 10];
+			s7_c1 = s7_bscl * s7_tt[s7_i][s7_bbase + 1];
+			s7_c2 = s7_bscl * s7_tt[s7_i][s7_bbase + 2];
+			s7_c3 = s7_bscl * s7_tt[s7_i][s7_bbase + 3];
+			s7_c4 = s7_bscl * s7_tt[s7_i][s7_bbase + 4];
+			s7_c5 = s7_bscl * s7_tt[s7_i][s7_bbase + 5];
+			s7_c6 = s7_bscl * s7_tt[s7_i][s7_bbase + 6];
+			s7_c7 = s7_bscl * s7_tt[s7_i][s7_bbase + 7];
+			s7_c8 = s7_bscl * s7_tt[s7_i][s7_bbase + 8];
+			s7_c9 = s7_bscl * s7_tt[s7_i][s7_bbase + 9];
+			s7_c10 = s7_bscl * s7_tt[s7_i][s7_bbase + 10];
+			s7_tt[s7_i][s7_obase + 1] = s7_g1;
+			s7_tt[s7_i][s7_obase + 2] = s7_c1 + 0.5 * s7_g2;
+			s7_tt[s7_i][s7_obase + 3] = 0.5 * s7_g2;
+			s7_tt[s7_i][s7_obase + 4] = s7_c2 + s7_g3;
+			s7_tt[s7_i][s7_obase + 5] = s7_g3;
+			s7_tt[s7_i][s7_obase + 6] = s7_g4;
+			s7_tt[s7_i][s7_obase + 7] = s7_c3 + 0.5 * s7_c4 + 0.5 * s7_g5 + 0.375 * s7_g7;
+			s7_tt[s7_i][s7_obase + 8] = 0.5 * (s7_c4 + s7_g5 + s7_g7);
+			s7_tt[s7_i][s7_obase + 9] = 0.5 * s7_g5 + 0.25 * s7_g7;
+			s7_tt[s7_i][s7_obase + 10] = 0.125 * s7_g7;
+			s7_tt[s7_i][s7_obase + 11] = s7_c5 + s7_g6;
+			s7_tt[s7_i][s7_obase + 12] = s7_c7 + s7_g8;
+			s7_tt[s7_i][s7_obase + 13] = s7_g6;
+			s7_tt[s7_i][s7_obase + 14] = s7_g8;
+			s7_tt[s7_i][s7_obase + 15] = s7_c6 + 0.5 * s7_c8 + 0.5 * s7_g9;
+			s7_tt[s7_i][s7_obase + 16] = 0.5 * (s7_c8 + s7_g9);
+			s7_tt[s7_i][s7_obase + 17] = 0.5 * s7_g9;
+			s7_tt[s7_i][s7_obase + 18] = s7_c9 + s7_g10;
+			s7_tt[s7_i][s7_obase + 19] = s7_g10;
+			s7_tt[s7_i][s7_obase + 20] = s7_c10;
+			for (s7_k = 1; s7_k <= 20; s7_k = s7_k + (1))
+			{
+				s7_tt[s7_i][s7_obase + s7_k] = s7_tt[s7_i][s7_obase + s7_k] * s7_vec1[s7_k];
+			}
+		}
+		for (s7_k = 1; s7_k <= 20; s7_k = s7_k + (1))
+		{
+			s7_vec1[20 + s7_k] = s7_vec1[20 + s7_k] + s7_tt[s7_i][200 + s7_k];
+			s7_vec1[40 + s7_k] = s7_vec1[40 + s7_k] + s7_tt[s7_i][220 + s7_k];
+		}
+	}
+	strcat(bs_ln, " "); bs_out();
+	strcat(bs_ln, "Seventh order, per surface, transverse measure"); bs_out();
+	strcat(bs_ln, " "); bs_out();
+	strcat(bs_ln, "  tau1 is seventh-order spherical aberration; the aperture power falls from"); bs_out();
+	strcat(bs_ln, "  seven to zero across the twenty and the field power rises to meet it."); bs_out();
+	for (s7_i = 1; s7_i <= s7_nsm; s7_i = s7_i + (1))
+	{
+		strcat(bs_ln, " "); bs_out();
+		strcat(bs_ln, " Surface"); sprintf(bs_tmp, "%4.0f", 1.0*(s7_i)); strcat(bs_ln, bs_tmp); bs_out();
+		strcat(bs_ln, "            tau1           tau2           tau3           tau4           tau5"); bs_out();
+		strcat(bs_ln, "  tot"); sprintf(bs_tmp, "%15.6e", 1.0*(s7_tt[s7_i][201])); strcat(bs_ln, bs_tmp); sprintf(bs_tmp, "%15.6e", 1.0*(s7_tt[s7_i][202])); strcat(bs_ln, bs_tmp); sprintf(bs_tmp, "%15.6e", 1.0*(s7_tt[s7_i][203])); strcat(bs_ln, bs_tmp); sprintf(bs_tmp, "%15.6e", 1.0*(s7_tt[s7_i][204])); strcat(bs_ln, bs_tmp); sprintf(bs_tmp, "%15.6e", 1.0*(s7_tt[s7_i][205])); strcat(bs_ln, bs_tmp); bs_out();
+		strcat(bs_ln, "  int"); sprintf(bs_tmp, "%15.6e", 1.0*(s7_tt[s7_i][221])); strcat(bs_ln, bs_tmp); sprintf(bs_tmp, "%15.6e", 1.0*(s7_tt[s7_i][222])); strcat(bs_ln, bs_tmp); sprintf(bs_tmp, "%15.6e", 1.0*(s7_tt[s7_i][223])); strcat(bs_ln, bs_tmp); sprintf(bs_tmp, "%15.6e", 1.0*(s7_tt[s7_i][224])); strcat(bs_ln, bs_tmp); sprintf(bs_tmp, "%15.6e", 1.0*(s7_tt[s7_i][225])); strcat(bs_ln, bs_tmp); bs_out();
+		strcat(bs_ln, "  ind"); sprintf(bs_tmp, "%15.6e", 1.0*(s7_tt[s7_i][201] - s7_tt[s7_i][221])); strcat(bs_ln, bs_tmp); sprintf(bs_tmp, "%15.6e", 1.0*(s7_tt[s7_i][202] - s7_tt[s7_i][222])); strcat(bs_ln, bs_tmp); sprintf(bs_tmp, "%15.6e", 1.0*(s7_tt[s7_i][203] - s7_tt[s7_i][223])); strcat(bs_ln, bs_tmp); sprintf(bs_tmp, "%15.6e", 1.0*(s7_tt[s7_i][204] - s7_tt[s7_i][224])); strcat(bs_ln, bs_tmp); sprintf(bs_tmp, "%15.6e", 1.0*(s7_tt[s7_i][205] - s7_tt[s7_i][225])); strcat(bs_ln, bs_tmp); bs_out();
+		strcat(bs_ln, "            tau6           tau7           tau8           tau9          tau10"); bs_out();
+		strcat(bs_ln, "  tot"); sprintf(bs_tmp, "%15.6e", 1.0*(s7_tt[s7_i][206])); strcat(bs_ln, bs_tmp); sprintf(bs_tmp, "%15.6e", 1.0*(s7_tt[s7_i][207])); strcat(bs_ln, bs_tmp); sprintf(bs_tmp, "%15.6e", 1.0*(s7_tt[s7_i][208])); strcat(bs_ln, bs_tmp); sprintf(bs_tmp, "%15.6e", 1.0*(s7_tt[s7_i][209])); strcat(bs_ln, bs_tmp); sprintf(bs_tmp, "%15.6e", 1.0*(s7_tt[s7_i][210])); strcat(bs_ln, bs_tmp); bs_out();
+		strcat(bs_ln, "  int"); sprintf(bs_tmp, "%15.6e", 1.0*(s7_tt[s7_i][226])); strcat(bs_ln, bs_tmp); sprintf(bs_tmp, "%15.6e", 1.0*(s7_tt[s7_i][227])); strcat(bs_ln, bs_tmp); sprintf(bs_tmp, "%15.6e", 1.0*(s7_tt[s7_i][228])); strcat(bs_ln, bs_tmp); sprintf(bs_tmp, "%15.6e", 1.0*(s7_tt[s7_i][229])); strcat(bs_ln, bs_tmp); sprintf(bs_tmp, "%15.6e", 1.0*(s7_tt[s7_i][230])); strcat(bs_ln, bs_tmp); bs_out();
+		strcat(bs_ln, "  ind"); sprintf(bs_tmp, "%15.6e", 1.0*(s7_tt[s7_i][206] - s7_tt[s7_i][226])); strcat(bs_ln, bs_tmp); sprintf(bs_tmp, "%15.6e", 1.0*(s7_tt[s7_i][207] - s7_tt[s7_i][227])); strcat(bs_ln, bs_tmp); sprintf(bs_tmp, "%15.6e", 1.0*(s7_tt[s7_i][208] - s7_tt[s7_i][228])); strcat(bs_ln, bs_tmp); sprintf(bs_tmp, "%15.6e", 1.0*(s7_tt[s7_i][209] - s7_tt[s7_i][229])); strcat(bs_ln, bs_tmp); sprintf(bs_tmp, "%15.6e", 1.0*(s7_tt[s7_i][210] - s7_tt[s7_i][230])); strcat(bs_ln, bs_tmp); bs_out();
+		strcat(bs_ln, "           tau11          tau12          tau13          tau14          tau15"); bs_out();
+		strcat(bs_ln, "  tot"); sprintf(bs_tmp, "%15.6e", 1.0*(s7_tt[s7_i][211])); strcat(bs_ln, bs_tmp); sprintf(bs_tmp, "%15.6e", 1.0*(s7_tt[s7_i][212])); strcat(bs_ln, bs_tmp); sprintf(bs_tmp, "%15.6e", 1.0*(s7_tt[s7_i][213])); strcat(bs_ln, bs_tmp); sprintf(bs_tmp, "%15.6e", 1.0*(s7_tt[s7_i][214])); strcat(bs_ln, bs_tmp); sprintf(bs_tmp, "%15.6e", 1.0*(s7_tt[s7_i][215])); strcat(bs_ln, bs_tmp); bs_out();
+		strcat(bs_ln, "  int"); sprintf(bs_tmp, "%15.6e", 1.0*(s7_tt[s7_i][231])); strcat(bs_ln, bs_tmp); sprintf(bs_tmp, "%15.6e", 1.0*(s7_tt[s7_i][232])); strcat(bs_ln, bs_tmp); sprintf(bs_tmp, "%15.6e", 1.0*(s7_tt[s7_i][233])); strcat(bs_ln, bs_tmp); sprintf(bs_tmp, "%15.6e", 1.0*(s7_tt[s7_i][234])); strcat(bs_ln, bs_tmp); sprintf(bs_tmp, "%15.6e", 1.0*(s7_tt[s7_i][235])); strcat(bs_ln, bs_tmp); bs_out();
+		strcat(bs_ln, "  ind"); sprintf(bs_tmp, "%15.6e", 1.0*(s7_tt[s7_i][211] - s7_tt[s7_i][231])); strcat(bs_ln, bs_tmp); sprintf(bs_tmp, "%15.6e", 1.0*(s7_tt[s7_i][212] - s7_tt[s7_i][232])); strcat(bs_ln, bs_tmp); sprintf(bs_tmp, "%15.6e", 1.0*(s7_tt[s7_i][213] - s7_tt[s7_i][233])); strcat(bs_ln, bs_tmp); sprintf(bs_tmp, "%15.6e", 1.0*(s7_tt[s7_i][214] - s7_tt[s7_i][234])); strcat(bs_ln, bs_tmp); sprintf(bs_tmp, "%15.6e", 1.0*(s7_tt[s7_i][215] - s7_tt[s7_i][235])); strcat(bs_ln, bs_tmp); bs_out();
+		strcat(bs_ln, "           tau16          tau17          tau18          tau19          tau20"); bs_out();
+		strcat(bs_ln, "  tot"); sprintf(bs_tmp, "%15.6e", 1.0*(s7_tt[s7_i][216])); strcat(bs_ln, bs_tmp); sprintf(bs_tmp, "%15.6e", 1.0*(s7_tt[s7_i][217])); strcat(bs_ln, bs_tmp); sprintf(bs_tmp, "%15.6e", 1.0*(s7_tt[s7_i][218])); strcat(bs_ln, bs_tmp); sprintf(bs_tmp, "%15.6e", 1.0*(s7_tt[s7_i][219])); strcat(bs_ln, bs_tmp); sprintf(bs_tmp, "%15.6e", 1.0*(s7_tt[s7_i][220])); strcat(bs_ln, bs_tmp); bs_out();
+		strcat(bs_ln, "  int"); sprintf(bs_tmp, "%15.6e", 1.0*(s7_tt[s7_i][236])); strcat(bs_ln, bs_tmp); sprintf(bs_tmp, "%15.6e", 1.0*(s7_tt[s7_i][237])); strcat(bs_ln, bs_tmp); sprintf(bs_tmp, "%15.6e", 1.0*(s7_tt[s7_i][238])); strcat(bs_ln, bs_tmp); sprintf(bs_tmp, "%15.6e", 1.0*(s7_tt[s7_i][239])); strcat(bs_ln, bs_tmp); sprintf(bs_tmp, "%15.6e", 1.0*(s7_tt[s7_i][240])); strcat(bs_ln, bs_tmp); bs_out();
+		strcat(bs_ln, "  ind"); sprintf(bs_tmp, "%15.6e", 1.0*(s7_tt[s7_i][216] - s7_tt[s7_i][236])); strcat(bs_ln, bs_tmp); sprintf(bs_tmp, "%15.6e", 1.0*(s7_tt[s7_i][217] - s7_tt[s7_i][237])); strcat(bs_ln, bs_tmp); sprintf(bs_tmp, "%15.6e", 1.0*(s7_tt[s7_i][218] - s7_tt[s7_i][238])); strcat(bs_ln, bs_tmp); sprintf(bs_tmp, "%15.6e", 1.0*(s7_tt[s7_i][219] - s7_tt[s7_i][239])); strcat(bs_ln, bs_tmp); sprintf(bs_tmp, "%15.6e", 1.0*(s7_tt[s7_i][220] - s7_tt[s7_i][240])); strcat(bs_ln, bs_tmp); bs_out();
+	}
+	strcat(bs_ln, " "); bs_out();
+	strcat(bs_ln, "Seventh order, system totals, transverse measure"); bs_out();
+	strcat(bs_ln, "            tau1           tau2           tau3           tau4           tau5"); bs_out();
+	strcat(bs_ln, "  tot"); sprintf(bs_tmp, "%15.6e", 1.0*(s7_vec1[21])); strcat(bs_ln, bs_tmp); sprintf(bs_tmp, "%15.6e", 1.0*(s7_vec1[22])); strcat(bs_ln, bs_tmp); sprintf(bs_tmp, "%15.6e", 1.0*(s7_vec1[23])); strcat(bs_ln, bs_tmp); sprintf(bs_tmp, "%15.6e", 1.0*(s7_vec1[24])); strcat(bs_ln, bs_tmp); sprintf(bs_tmp, "%15.6e", 1.0*(s7_vec1[25])); strcat(bs_ln, bs_tmp); bs_out();
+	strcat(bs_ln, "  int"); sprintf(bs_tmp, "%15.6e", 1.0*(s7_vec1[41])); strcat(bs_ln, bs_tmp); sprintf(bs_tmp, "%15.6e", 1.0*(s7_vec1[42])); strcat(bs_ln, bs_tmp); sprintf(bs_tmp, "%15.6e", 1.0*(s7_vec1[43])); strcat(bs_ln, bs_tmp); sprintf(bs_tmp, "%15.6e", 1.0*(s7_vec1[44])); strcat(bs_ln, bs_tmp); sprintf(bs_tmp, "%15.6e", 1.0*(s7_vec1[45])); strcat(bs_ln, bs_tmp); bs_out();
+	strcat(bs_ln, "  ind"); sprintf(bs_tmp, "%15.6e", 1.0*(s7_vec1[21] - s7_vec1[41])); strcat(bs_ln, bs_tmp); sprintf(bs_tmp, "%15.6e", 1.0*(s7_vec1[22] - s7_vec1[42])); strcat(bs_ln, bs_tmp); sprintf(bs_tmp, "%15.6e", 1.0*(s7_vec1[23] - s7_vec1[43])); strcat(bs_ln, bs_tmp); sprintf(bs_tmp, "%15.6e", 1.0*(s7_vec1[24] - s7_vec1[44])); strcat(bs_ln, bs_tmp); sprintf(bs_tmp, "%15.6e", 1.0*(s7_vec1[25] - s7_vec1[45])); strcat(bs_ln, bs_tmp); bs_out();
+	strcat(bs_ln, "            tau6           tau7           tau8           tau9          tau10"); bs_out();
+	strcat(bs_ln, "  tot"); sprintf(bs_tmp, "%15.6e", 1.0*(s7_vec1[26])); strcat(bs_ln, bs_tmp); sprintf(bs_tmp, "%15.6e", 1.0*(s7_vec1[27])); strcat(bs_ln, bs_tmp); sprintf(bs_tmp, "%15.6e", 1.0*(s7_vec1[28])); strcat(bs_ln, bs_tmp); sprintf(bs_tmp, "%15.6e", 1.0*(s7_vec1[29])); strcat(bs_ln, bs_tmp); sprintf(bs_tmp, "%15.6e", 1.0*(s7_vec1[30])); strcat(bs_ln, bs_tmp); bs_out();
+	strcat(bs_ln, "  int"); sprintf(bs_tmp, "%15.6e", 1.0*(s7_vec1[46])); strcat(bs_ln, bs_tmp); sprintf(bs_tmp, "%15.6e", 1.0*(s7_vec1[47])); strcat(bs_ln, bs_tmp); sprintf(bs_tmp, "%15.6e", 1.0*(s7_vec1[48])); strcat(bs_ln, bs_tmp); sprintf(bs_tmp, "%15.6e", 1.0*(s7_vec1[49])); strcat(bs_ln, bs_tmp); sprintf(bs_tmp, "%15.6e", 1.0*(s7_vec1[50])); strcat(bs_ln, bs_tmp); bs_out();
+	strcat(bs_ln, "  ind"); sprintf(bs_tmp, "%15.6e", 1.0*(s7_vec1[26] - s7_vec1[46])); strcat(bs_ln, bs_tmp); sprintf(bs_tmp, "%15.6e", 1.0*(s7_vec1[27] - s7_vec1[47])); strcat(bs_ln, bs_tmp); sprintf(bs_tmp, "%15.6e", 1.0*(s7_vec1[28] - s7_vec1[48])); strcat(bs_ln, bs_tmp); sprintf(bs_tmp, "%15.6e", 1.0*(s7_vec1[29] - s7_vec1[49])); strcat(bs_ln, bs_tmp); sprintf(bs_tmp, "%15.6e", 1.0*(s7_vec1[30] - s7_vec1[50])); strcat(bs_ln, bs_tmp); bs_out();
+	strcat(bs_ln, "           tau11          tau12          tau13          tau14          tau15"); bs_out();
+	strcat(bs_ln, "  tot"); sprintf(bs_tmp, "%15.6e", 1.0*(s7_vec1[31])); strcat(bs_ln, bs_tmp); sprintf(bs_tmp, "%15.6e", 1.0*(s7_vec1[32])); strcat(bs_ln, bs_tmp); sprintf(bs_tmp, "%15.6e", 1.0*(s7_vec1[33])); strcat(bs_ln, bs_tmp); sprintf(bs_tmp, "%15.6e", 1.0*(s7_vec1[34])); strcat(bs_ln, bs_tmp); sprintf(bs_tmp, "%15.6e", 1.0*(s7_vec1[35])); strcat(bs_ln, bs_tmp); bs_out();
+	strcat(bs_ln, "  int"); sprintf(bs_tmp, "%15.6e", 1.0*(s7_vec1[51])); strcat(bs_ln, bs_tmp); sprintf(bs_tmp, "%15.6e", 1.0*(s7_vec1[52])); strcat(bs_ln, bs_tmp); sprintf(bs_tmp, "%15.6e", 1.0*(s7_vec1[53])); strcat(bs_ln, bs_tmp); sprintf(bs_tmp, "%15.6e", 1.0*(s7_vec1[54])); strcat(bs_ln, bs_tmp); sprintf(bs_tmp, "%15.6e", 1.0*(s7_vec1[55])); strcat(bs_ln, bs_tmp); bs_out();
+	strcat(bs_ln, "  ind"); sprintf(bs_tmp, "%15.6e", 1.0*(s7_vec1[31] - s7_vec1[51])); strcat(bs_ln, bs_tmp); sprintf(bs_tmp, "%15.6e", 1.0*(s7_vec1[32] - s7_vec1[52])); strcat(bs_ln, bs_tmp); sprintf(bs_tmp, "%15.6e", 1.0*(s7_vec1[33] - s7_vec1[53])); strcat(bs_ln, bs_tmp); sprintf(bs_tmp, "%15.6e", 1.0*(s7_vec1[34] - s7_vec1[54])); strcat(bs_ln, bs_tmp); sprintf(bs_tmp, "%15.6e", 1.0*(s7_vec1[35] - s7_vec1[55])); strcat(bs_ln, bs_tmp); bs_out();
+	strcat(bs_ln, "           tau16          tau17          tau18          tau19          tau20"); bs_out();
+	strcat(bs_ln, "  tot"); sprintf(bs_tmp, "%15.6e", 1.0*(s7_vec1[36])); strcat(bs_ln, bs_tmp); sprintf(bs_tmp, "%15.6e", 1.0*(s7_vec1[37])); strcat(bs_ln, bs_tmp); sprintf(bs_tmp, "%15.6e", 1.0*(s7_vec1[38])); strcat(bs_ln, bs_tmp); sprintf(bs_tmp, "%15.6e", 1.0*(s7_vec1[39])); strcat(bs_ln, bs_tmp); sprintf(bs_tmp, "%15.6e", 1.0*(s7_vec1[40])); strcat(bs_ln, bs_tmp); bs_out();
+	strcat(bs_ln, "  int"); sprintf(bs_tmp, "%15.6e", 1.0*(s7_vec1[56])); strcat(bs_ln, bs_tmp); sprintf(bs_tmp, "%15.6e", 1.0*(s7_vec1[57])); strcat(bs_ln, bs_tmp); sprintf(bs_tmp, "%15.6e", 1.0*(s7_vec1[58])); strcat(bs_ln, bs_tmp); sprintf(bs_tmp, "%15.6e", 1.0*(s7_vec1[59])); strcat(bs_ln, bs_tmp); sprintf(bs_tmp, "%15.6e", 1.0*(s7_vec1[60])); strcat(bs_ln, bs_tmp); bs_out();
+	strcat(bs_ln, "  ind"); sprintf(bs_tmp, "%15.6e", 1.0*(s7_vec1[36] - s7_vec1[56])); strcat(bs_ln, bs_tmp); sprintf(bs_tmp, "%15.6e", 1.0*(s7_vec1[37] - s7_vec1[57])); strcat(bs_ln, bs_tmp); sprintf(bs_tmp, "%15.6e", 1.0*(s7_vec1[38] - s7_vec1[58])); strcat(bs_ln, bs_tmp); sprintf(bs_tmp, "%15.6e", 1.0*(s7_vec1[39] - s7_vec1[59])); strcat(bs_ln, bs_tmp); sprintf(bs_tmp, "%15.6e", 1.0*(s7_vec1[40] - s7_vec1[60])); strcat(bs_ln, bs_tmp); bs_out();
+	strcat(bs_ln, " "); bs_out();
+	strcat(bs_ln, "tau1 above must equal B7 in the fifth-order totals; the two reach it by"); bs_out();
+	strcat(bs_ln, "different routes and agree exactly on a system of spheres."); bs_out();
+	strcat(bs_ln, " "); bs_out();
+	strcat(bs_ln, "The third and fifth orders above are unconverted per surface - multiply by"); bs_out();
+	strcat(bs_ln, "the F/number, which is done for their totals."); bs_out();
+	return (0);
+}
+
+static int
+s7_part7()
+{
+	for (s7_i = 1; s7_i <= s7_nsm; s7_i = s7_i + (1))
+	{
+		s7_q9v2 = s7_tt[s7_i][156];
+		s7_q9v9 = s7_q9v2 * s7_q9v2;
+		s7_tt[s7_i][241] = 0;
+		s7_tt[s7_i][242] = 0;
+		if (s7_i > 1)
+		{
+			for (s7_m = 1; s7_m <= s7_i - 1; s7_m = s7_m + (1))
+			{
+				s7_tt[s7_i][241] = s7_tt[s7_i][241] + s7_tt[s7_m][132];
+				s7_tt[s7_i][242] = s7_tt[s7_i][242] + s7_tt[s7_m][133];
+			}
+		}
+		s7_q9a = ((s7_tt[s7_i][83] - s7_tt[s7_i][9] - s7_tt[s7_i][20]) * s7_tt[s7_i][15] + s7_tt[s7_i][69]) * s7_tt[s7_i][81] + s7_tt[s7_i][6] * s7_tt[s7_i][241] - s7_tt[s7_i][242];
+		s7_q9b = ((0.5 * s7_tt[s7_i][20] + s7_tt[s7_i][9] - s7_tt[s7_i][83]) * s7_tt[s7_i][20] + s7_tt[s7_i][9] * s7_tt[s7_i][83] - s7_tt[s7_i][86]) * s7_tt[s7_i][9];
+		s7_q9c = (0.5 * s7_tt[s7_i][15] * s7_tt[s7_i][82] - s7_tt[s7_i][6] * s7_tt[s7_i][70] + s7_tt[s7_i][102]) * s7_tt[s7_i][15] + s7_tt[s7_i][16] * s7_tt[s7_i][86] - s7_tt[s7_i][21] * s7_tt[s7_i][69];
+		s7_tt[s7_i][243] = (2.5 * s7_tt[s7_i][83] - 3.0 * s7_tt[s7_i][9]) * s7_tt[s7_i][83] * s7_tt[s7_i][83] + s7_tt[s7_i][20] * s7_tt[s7_i][70] + s7_q9a + s7_q9b + s7_q9c;
+		s7_tt[s7_i][244] = 0.25 * (s7_q9v9 - s7_tt[s7_i][9]) * s7_tt[s7_i][10];
+		s7_tt[s7_i][245] = (17.0 * s7_tt[s7_i][2] - 9.0 * s7_q9v2) * s7_tt[s7_i][7] * s7_tt[s7_i][244];
+		s7_tt[s7_i][246] = (41.0 * s7_q9v2 - 87.0 * s7_tt[s7_i][2]) * s7_tt[s7_i][7] * s7_tt[s7_i][38] / 3.0;
+		s7_tt[s7_i][247] = (280.0 * s7_tt[s7_i][34] * s7_tt[s7_i][34] * s7_tt[s7_i][34] + s7_tt[s7_i][245] + s7_tt[s7_i][246]) * s7_tt[s7_i][10] / 8.0;
+		s7_q9d = ((-0.5 * s7_tt[s7_i][8] * s7_tt[s7_i][25] - s7_tt[s7_i][48] + s7_tt[s7_i][49]) * s7_tt[s7_i][15] - s7_tt[s7_i][8] * s7_tt[s7_i][69] + s7_tt[s7_i][122]) * s7_tt[s7_i][15];
+		s7_q9e = ((s7_tt[s7_i][25] * s7_tt[s7_i][25] + 6.0 * s7_tt[s7_i][101]) * s7_tt[s7_i][25] + 3.0 * s7_tt[s7_i][243]) * s7_tt[s7_i][10];
+		s7_q9f = (4.0 * s7_tt[s7_i][15] * s7_tt[s7_i][43] + 7.0 * s7_tt[s7_i][121]) * s7_tt[s7_i][25] + s7_tt[s7_i][43] * s7_tt[s7_i][69];
+		s7_tt[s7_i][248] = (2.0 * s7_tt[s7_i][25] * s7_tt[s7_i][25] + s7_tt[s7_i][101]) * 5.0 * s7_tt[s7_i][38] + s7_tt[s7_i][247] + s7_q9d + s7_q9e + s7_q9f;
+	}
+	s7_q9sum = 0;
+	for (s7_i = 1; s7_i <= s7_nsm; s7_i = s7_i + (1))
+	{
+		s7_q9sum = s7_q9sum + s7_tt[s7_i][248];
+	}
+	s7_up9 = s7_up7 * s7_um * s7_um;
+	s7_q9t = s7_q9sum * s7_efac * s7_up9;
+	if (s7_q9 == 1)
+	{
+		strcat(bs_ln, " "); bs_out();
+		strcat(bs_ln, "Ninth order - quaternary spherical aberration, per surface"); bs_out();
+		strcat(bs_ln, "Buchdahl IV, J. Opt. Soc. Am. 48, 757 (1958), Table I. Unconverted, as the"); bs_out();
+		strcat(bs_ln, "third and fifth orders above are. INTRINSIC is what the surface makes on its"); bs_out();
+		strcat(bs_ln, "own; TOTAL adds what it makes by acting on the aberration already reaching it."); bs_out();
+		strcat(bs_ln, "  surf      intrinsic          total      T1-dagger             r1             r2"); bs_out();
+		for (s7_i = 1; s7_i <= s7_nsm; s7_i = s7_i + (1))
+		{
+			sprintf(bs_tmp, "%5.0f", 1.0*(s7_i)); strcat(bs_ln, bs_tmp);
+			sprintf(bs_tmp, "%15.6e", 1.0*(s7_tt[s7_i][247])); strcat(bs_ln, bs_tmp); sprintf(bs_tmp, "%15.6e", 1.0*(s7_tt[s7_i][248])); strcat(bs_ln, bs_tmp); sprintf(bs_tmp, "%15.6e", 1.0*(s7_tt[s7_i][243])); strcat(bs_ln, bs_tmp); sprintf(bs_tmp, "%15.6e", 1.0*(s7_tt[s7_i][241])); strcat(bs_ln, bs_tmp); sprintf(bs_tmp, "%15.6e", 1.0*(s7_tt[s7_i][242])); strcat(bs_ln, bs_tmp); bs_out();
+		}
+		strcat(bs_ln, " "); bs_out();
+		strcat(bs_ln, "Ninth-order spherical, unconverted     "); sprintf(bs_tmp, "%15.6e", 1.0*(s7_q9sum)); strcat(bs_ln, bs_tmp); bs_out();
+		strcat(bs_ln, "Ninth-order spherical, transverse (B9) "); sprintf(bs_tmp, "%15.6e", 1.0*(s7_q9t)); strcat(bs_ln, bs_tmp); bs_out();
+		strcat(bs_ln, " "); bs_out();
+		strcat(bs_ln, "The transverse value carries efac * um^9. That extends a rule confirmed at total"); bs_out();
+		strcat(bs_ln, "degree seven, and the extension was checked: the ratio of the two lines above"); bs_out();
+		strcat(bs_ln, "factors into -(EPD/2)/EFL raised to the ninth and efac = EFL, to six figures."); bs_out();
+		strcat(bs_ln, " "); bs_out();
+		strcat(bs_ln, "Buchdahl's rule of thumb, from the closing paragraph of paper IV: a system"); bs_out();
+		strcat(bs_ln, "intended to work at f/2 should aim at individual contributions of at most"); bs_out();
+		strcat(bs_ln, "order 1000 at unit focal length. His own triplet runs to six figures, which"); bs_out();
+		strcat(bs_ln, "is why he chose it - it is a poorly corrected system and the table shows it."); bs_out();
+	}
+	return (0);
+}
+
+static int
+s7_main()
+{
+	s7_part1();
+	s7_part2();
+	s7_part3();
+	s7_part4();
+	s7_part5();
+	s7_part6();
+	if (s7_stop) return (0);
+	s7_part7();
+	return (0);
+}
+
+static int
+bs_run(int n_q9arg, int n_wavarg)
+{
+	int    n_i, n_wvn, n_bad, n_infobj, n_nmir;
+	double n_sgn, n_t0, n_epup, n_efl, n_epd, n_uobj, n_yobj, n_a_st, n_b_st, n_yA, n_lag, n_n0;
+	double n_n0abs, n_pupf, n_nlast, n_fnum, n_objd, n_iota, n_fld, n_p0, n_p0chief;
+
+	bs_nsm = ims - 1;
+	if (bs_nsm < 2)
+	{
+		sprintf(bs_ln, "buch7 needs at least two surfaces before the image (a dummy plane will do).");
+		bs_out();
+		return (0);
+	}
+	if (ims + 1 > BS_MAXS)
+	{
+		sprintf(bs_ln, "buch7 holds at most %d surfaces between object and image.", BS_MAXS - 2);
+		bs_out();
+		return (0);
+	}
+	if (n_wavarg > 0)
+		n_wvn = n_wavarg;
+	else
+		n_wvn = +wav + 1;
+
+	// ---- spheres only. Refuse rather than mislead: this arrangement is the spherical one.
+	n_bad = 0;
+	for (n_i = 1; n_i <= bs_nsm; n_i++)
+	{
+		if (!(srftyp[n_i] == 0 || srftyp[n_i] == 1 || srftyp[n_i] == 4 || srftyp[n_i] == 5))
+		{
+			sprintf(bs_ln, "Surface %d is of type %d (OSLO srftyp), not a plane or a sphere.", n_i, srftyp[n_i]);
+			bs_out();
+			n_bad = 1;
+		}
+		else if (fabs(cc[n_i]) > 1e-10 || fabs(ad[n_i]) > 0.0 || fabs(ae[n_i]) > 0.0
+		         || fabs(af[n_i]) > 0.0 || fabs(ag[n_i]) > 0.0 || (srftyp[n_i] == 5 && asp[n_i] != 0))
+		{
+			sprintf(bs_ln, "Surface %d carries a conic or an aspheric term.", n_i);
+			bs_out();
+			n_bad = 1;
+		}
+	}
+	if (n_bad)
+	{
+		sprintf(bs_ln, "buch7 handles spherical surfaces only. Buchdahl gives the aspheric scheme but never");
+		bs_out();
+		sprintf(bs_ln, "published the arranged table for it, so this declines rather than guess. buch7_asph,");
+		bs_out();
+		sprintf(bs_ln, "beside it, is that arrangement reconstructed and carries conics and even aspheres");
+		bs_out();
+		sprintf(bs_ln, "through the seventh order. Run it on this lens instead.");
+		bs_out();
+		return (0);
+	}
+
+	// ---- the index after each surface, signed by the mirror count
+	n_sgn = 1.0;
+	n_nmir = 0;
+	bs_ns[0] = fabs(rn[0][n_wvn]);
+	for (n_i = 1; n_i <= bs_nsm; n_i++)
+	{
+		if (gltyp[n_i] == 4)
+		{
+			n_sgn = -n_sgn;
+			n_nmir++;
+			bs_ns[n_i] = n_sgn*fabs(bs_ns[n_i - 1]);
+		}
+		else
+			bs_ns[n_i] = n_sgn*fabs(rn[n_i][n_wvn]);
+	}
+
+	// ---- the two paraxial rays, exactly as ParaxialTrace launches them
+	n_infobj = 0;
+	n_t0 = fabs(th[0]);
+	if (n_t0 >= 1e10)
+	{
+		n_infobj = 1;
+		n_t0 = 0.0;
+	}
+	if (ast < 1 || ast > bs_nsm)
+	{
+		sprintf(bs_ln, "No aperture stop between the object and the image.");
+		bs_out();
+		return (0);
+	}
+	bs_prop(1.0, 0.0);
+	n_a_st = bs_ya[ast];
+	n_yA = bs_ns[bs_nsm]*bs_ua[bs_nsm];
+	bs_prop(0.0, 1.0);
+	n_b_st = bs_ya[ast];
+	if (fabs(n_a_st) > 1e-15)
+		n_epup = n_b_st/n_a_st;
+	else
+		n_epup = 0.0;
+	if (fabs(n_yA) < 1e-15)
+	{
+		sprintf(bs_ln, "The system has no focal length; an afocal system is not handled.");
+		bs_out();
+		return (0);
+	}
+	n_efl = -bs_ns[0]/n_yA;
+
+	// the marginal ray: from the axial object point to the edge of the entrance pupil
+	n_epd = 2.0*(+ebr);
+	if (n_infobj)
+	{
+		n_yobj = 0.5*n_epd;
+		n_uobj = 0.0;
+	}
+	else
+	{
+		n_uobj = 0.5*n_epd/(n_t0 + n_epup);
+		n_yobj = n_uobj*n_t0;
+	}
+	bs_prop(n_yobj, n_uobj);
+	for (n_i = 0; n_i <= bs_nsm; n_i++)
+	{
+		bs_ym[n_i] = bs_ya[n_i];
+		bs_um[n_i] = bs_ua[n_i];
+	}
+
+	// the chief ray: from the edge of the field through the centre of the entrance pupil.
+	// At infinity the field is ANG; at a finite object it is the object height OBH.
+	if (n_infobj)
+	{
+		n_fld = +ang;
+		n_uobj = tan(n_fld);
+		n_yobj = -n_uobj*n_epup;
+	}
+	else
+	{
+		n_fld = fabs(+obh);
+		n_uobj = -n_fld/(n_t0 + n_epup);
+		n_yobj = n_fld + n_uobj*n_t0;
+	}
+	bs_prop(n_yobj, n_uobj);
+	for (n_i = 0; n_i <= bs_nsm; n_i++)
+	{
+		bs_yc[n_i] = bs_ya[n_i];
+		bs_uc[n_i] = bs_ua[n_i];
+	}
+
+	n_n0 = bs_ns[0];
+	n_lag = n_n0*(bs_uc[0]*bs_ym[1] - bs_um[0]*bs_yc[1]);
+	n_n0abs = fabs(n_n0);
+	if (n_n0abs < 1e-10)
+		n_n0abs = 1.0;
+	if (fabs(n_lag) < 1e-10)
+	{
+		sprintf(bs_ln, "The Lagrange invariant is zero. Is the field zero, or the aperture?");
+		bs_out();
+		return (0);
+	}
+
+	n_p0 = n_epup/n_efl;
+	n_pupf = bs_um[bs_nsm];
+	n_nlast = fabs(bs_ns[bs_nsm]);
+	n_fnum = -0.5/n_nlast/n_pupf;
+	n_objd = th[0];
+	n_iota = 0.0;
+	if (!n_infobj)
+		n_iota = -n_efl/n_objd;
+
+	sprintf(bs_ln, "BUCH7 (OSLO) - Buchdahl coefficients, spherical surfaces");
+	bs_out();
+	sprintf(bs_ln, "Wavelength             %d (%.6f um)", n_wvn, wv[n_wvn]);
+	bs_out();
+	sprintf(bs_ln, "Effective focal length %.6f", n_efl);
+	bs_out();
+	sprintf(bs_ln, "F/number               %.6f", n_fnum);
+	bs_out();
+	sprintf(bs_ln, "Lagrange invariant     %.10g", n_lag);
+	bs_out();
+	sprintf(bs_ln, "Entrance pupil         %.6f from surface 1, radius %.6f", n_epup, 0.5*n_epd);
+	bs_out();
+	sprintf(bs_ln, "Buchdahl p             %.6f", n_p0);
+	bs_out();
+	// Buchdahl's p a second time, from the chief ray, as the macro checks it.
+	if (fabs(bs_uc[0]) > 1e-10)
+	{
+		n_p0chief = (bs_yc[1]*(-1.0/bs_uc[0]))/n_efl;
+		if (fabs(n_p0chief - n_p0) > 1e-6*(1.0 + fabs(n_p0)))
+		{
+			sprintf(bs_ln, "WARNING: the entrance pupil and the chief ray disagree about Buchdahl's p");
+			bs_out();
+			sprintf(bs_ln, "(%.10g and %.10g). The higher orders are built on it; treat them as suspect.", n_p0, n_p0chief);
+			bs_out();
+		}
+	}
+	if (n_infobj)
+	{
+		sprintf(bs_ln, "Object                 at infinity, field angle %.6f deg", n_fld*180.0/pi);
+		bs_out();
+	}
+	else
+	{
+		sprintf(bs_ln, "Object distance        %.6f, object height %.6f", n_objd, n_fld);
+		bs_out();
+		sprintf(bs_ln, "Buchdahl iota          %.6f", n_iota);
+		bs_out();
+	}
+	if (n_nmir > 0)
+	{
+		sprintf(bs_ln, "Reflections            %d", n_nmir);
+		bs_out();
+	}
+	// A lens with no field: OSLO traces its chief ray at a slope of 1e-6 instead. B, B5 and
+	// B7 do not depend on the field and are right; everything else is for that made-up field.
+	if (fabs(n_uobj) < 1e-5)
+	{
+		sprintf(bs_ln, "WARNING: the field is OSLO's minimum (chief-ray slope %.1e), not a field of", n_uobj);
+		bs_out();
+		sprintf(bs_ln, "this lens. Only B, B5 and B7 mean anything; every field-dependent coefficient");
+		bs_out();
+		sprintf(bs_ln, "below is for that minimum field, and is zero for the lens itself.");
+		bs_out();
+	}
+	sprintf(bs_ln, " ");
+	bs_out();
+
+	// ---- the paraxial rays, so they can be set beside OSLO's own (pxt all)
+	sprintf(bs_ln, "Paraxial rays (axial: height, slope after; chief: height, slope after)");
+	bs_out();
+	sprintf(bs_ln, " Srf            PY             PU            PYC            PUC        index after");
+	bs_out();
+	for (n_i = 0; n_i <= bs_nsm; n_i++)
+	{
+		sprintf(bs_ln, "%4d %14.8f %14.8f %14.8f %14.8f %14.8f", n_i, bs_ym[n_i], bs_um[n_i], bs_yc[n_i], bs_uc[n_i], bs_ns[n_i]);
+		bs_out();
+	}
+	sprintf(bs_ln, " ");
+	bs_out();
+
+	// ==================================================================================
+	// Hand over to the macro's own arithmetic, translated statement for statement.
+	// ==================================================================================
+	s7_zero();
+	s7_nsm = bs_nsm;
+	s7_eps = 1e-10;
+	s7_efl = n_efl;
+	s7_epp = n_epup;
+	s7_lag = n_lag;
+	s7_n0abs = n_n0abs;
+	s7_p0 = n_p0;
+	s7_fnum = n_fnum;
+	s7_nlast = n_nlast;
+	s7_objd = n_objd;
+	s7_finite = 1 - n_infobj;
+	s7_iota = n_iota;
+	s7_goe = 1.0 - n_p0*n_iota;
+	s7_q9 = n_q9arg;
+	for (n_i = 0; n_i <= bs_nsm; n_i++)
+	{
+		s7_vec2[n_i + 1] = bs_ym[n_i];
+		s7_vec2[501 + n_i] = bs_um[n_i];
+		s7_vec3[n_i + 1] = bs_yc[n_i];
+		s7_vec3[501 + n_i] = bs_uc[n_i];
+	}
+	strcpy(bs_ln, "");
+	s7_stop = 0;
+	s7_main();
+
+	sprintf(bs_ln, " ");
+	bs_out();
+	sprintf(bs_ln, "AberrationCalculator reads this lens file and computes the same coefficients in its C#;");
+	bs_out();
+	sprintf(bs_ln, "run it on the .len (buchdahl or surface_breakdown) and every number above must agree.");
+	bs_out();
+	return (0);
+}
+
+cmd
+buch7(int bs_q9arg, int bs_wavarg, int bs_filearg)
+{
+	bs_wf = 0;
+	if (bs_filearg)
+	{
+		bs_fh = fopen(BS_REPORT, "at");
+		if (bs_fh > 0)
+			bs_wf = 1;
+		else
+			printf("buch7: cannot write %s; carrying on without the report file.\n", BS_REPORT);
+	}
+	bs_run(bs_q9arg, bs_wavarg);
+	if (bs_wf)
+	{
+		fclose(bs_fh);
+		bs_wf = 0;
+		printf("Report written to %s\n", BS_REPORT);
+	}
+}
