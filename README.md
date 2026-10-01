@@ -35,7 +35,7 @@ an element, building its split, and searching for the best one.
 ## Quick start
 
 ```bash
-git clone --recursive https://github.com/jaruiz6363/LensSplitter.git
+git clone https://github.com/jaruiz6363/LensSplitter.git
 cd LensSplitter
 dotnet build -c Release
 

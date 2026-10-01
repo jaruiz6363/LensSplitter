@@ -76,26 +76,18 @@ You should see version 8.0.x or higher.
 ### Clone the Repository
 
 LensSplitter builds on [AberrationCalculator](https://github.com/jaruiz6363/AberrationCalculator),
-which it carries as a git submodule in `external/AberrationCalculator`. Clone with the submodule:
+which it carries in `external/AberrationCalculator` as a copy of its source. A plain clone has
+everything; there is nothing else to fetch:
 
 ```bash
-git clone --recursive https://github.com/jaruiz6363/LensSplitter.git
+git clone https://github.com/jaruiz6363/LensSplitter.git
 cd LensSplitter
 ```
 
-If you cloned without `--recursive`, fetch it afterwards:
+The copy is a `git subtree` of a known AberrationCalculator commit. To move it to a newer one:
 
 ```bash
-git submodule update --init
-```
-
-The submodule is pinned to a known AberrationCalculator commit. To move it to a newer one:
-
-```bash
-cd external/AberrationCalculator
-git pull origin main
-cd ../..
-git add external/AberrationCalculator
+git subtree pull --prefix=external/AberrationCalculator https://github.com/jaruiz6363/AberrationCalculator.git main --squash
 ```
 
 ### Restore Dependencies
