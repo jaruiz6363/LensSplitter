@@ -1,0 +1,33 @@
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.0.31903.59
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Forbes7", "zosapi\Forbes7\Forbes7.csproj", "{F0B7E501-7A11-4C2E-9D3A-6E1B2C4D8A01}"
+EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "FixBinaries", "zosapi\FixBinaries\FixBinaries.csproj", "{F0B7E502-7A11-4C2E-9D3A-6E1B2C4D8A02}"
+EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "AberrationCalculator.Core", "src\AberrationCalculator.Core\AberrationCalculator.Core.csproj", "{F0B7E503-7A11-4C2E-9D3A-6E1B2C4D8A03}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{F0B7E501-7A11-4C2E-9D3A-6E1B2C4D8A01}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{F0B7E501-7A11-4C2E-9D3A-6E1B2C4D8A01}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{F0B7E501-7A11-4C2E-9D3A-6E1B2C4D8A01}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{F0B7E501-7A11-4C2E-9D3A-6E1B2C4D8A01}.Release|Any CPU.Build.0 = Release|Any CPU
+		{F0B7E502-7A11-4C2E-9D3A-6E1B2C4D8A02}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{F0B7E502-7A11-4C2E-9D3A-6E1B2C4D8A02}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{F0B7E502-7A11-4C2E-9D3A-6E1B2C4D8A02}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{F0B7E502-7A11-4C2E-9D3A-6E1B2C4D8A02}.Release|Any CPU.Build.0 = Release|Any CPU
+		{F0B7E503-7A11-4C2E-9D3A-6E1B2C4D8A03}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{F0B7E503-7A11-4C2E-9D3A-6E1B2C4D8A03}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{F0B7E503-7A11-4C2E-9D3A-6E1B2C4D8A03}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{F0B7E503-7A11-4C2E-9D3A-6E1B2C4D8A03}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+EndGlobal

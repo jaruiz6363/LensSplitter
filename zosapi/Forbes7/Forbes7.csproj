@@ -1,0 +1,51 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    ZemaxPaths.props is written by the FixBinaries project in this same solution and is
+    deliberately NOT in the repository: it names where OpticStudio is installed and which
+    release it is. Run FixBinaries once, on any machine, before building this.
+
+    There is no fallback path here on purpose. A default would either be wrong on every
+    machine but one, or it would publish the author's install - and it would fail late and
+    confusingly instead of early and clearly.
+  -->
+  <Import Project="ZemaxPaths.props" Condition="Exists('ZemaxPaths.props')" />
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net48</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <UseWindowsForms>true</UseWindowsForms>
+    <AssemblyName>forbes7</AssemblyName>
+    <RootNamespace>AberrationCalculator.Forbes7</RootNamespace>
+    <PlatformTarget>x64</PlatformTarget>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    <Deterministic>true</Deterministic>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\AberrationCalculator.Core\AberrationCalculator.Core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Not copied locally: they must be the ones the OpticStudio being driven has loaded. -->
+    <Reference Include="ZOSAPI" Condition="Exists('$(ZEMAX_ROOT)ZOSAPI.dll')">
+      <HintPath>$(ZEMAX_ROOT)ZOSAPI.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="ZOSAPI_Interfaces" Condition="Exists('$(ZEMAX_ROOT)ZOSAPI_Interfaces.dll')">
+      <HintPath>$(ZEMAX_ROOT)ZOSAPI_Interfaces.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="ZOSAPI_NetHelper" Condition="Exists('$(ZEMAX_ROOT)ZOSAPI_NetHelper.dll')">
+      <HintPath>$(ZEMAX_ROOT)ZOSAPI_NetHelper.dll</HintPath>
+    </Reference>
+  </ItemGroup>
+
+  <Target Name="RequireZemaxRoot" BeforeTargets="ResolveAssemblyReferences"
+          Condition="!Exists('$(ZEMAX_ROOT)ZOSAPI.dll')">
+    <Error Text="ZOSAPI.dll was not found. Build and run the FixBinaries project in this solution: it locates OpticStudio and writes ZemaxPaths.props next to Forbes7.csproj. That file is not in the repository by design." />
+  </Target>
+
+</Project>

@@ -1,0 +1,71 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    The aberration chain a FIFTH time: in Laurent series arithmetic AND differentiated.
+
+    Core        Scalar = double            the analysis
+    Core.Ad     Scalar = Dual              the optimiser's derivatives
+    Core.Series Scalar = LaurentSeries     a figured flat facing collimated light
+    THIS        Scalar = DualSeries        both at once
+
+    It exists for one design: a figured flat in collimated light, where the coefficients are
+    reached only as the e^0 term of a series in that surface's curvature. Core has done that
+    for a long time; what it could not do was DIFFERENTIATE it, so the optimiser refused such a
+    design rather than return a right value with a silently wrong derivative.
+
+    DualSeries is a dual number whose value and derivative are each a LaurentSeries, so the
+    series arithmetic underneath is the same code Core.Series uses, unmodified. The alternative
+    - a LaurentSeries generic over its coefficient type - would have meant editing three hundred
+    lines of delicate, already-verified arithmetic for a case it was not written for.
+
+    Like the other two linked builds it deliberately does NOT reference AberrationCalculator.Core,
+    so its types are a separate universe reached only through an extern alias.
+  -->
+
+  <PropertyGroup>
+    <TargetFrameworks>net8.0;netstandard2.0</TargetFrameworks>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <RootNamespace>AberrationCalculator.Core.SeriesAd</RootNamespace>
+    <AssemblyName>AberrationCalculator.Core.Series.Ad</AssemblyName>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!--
+      The series arithmetic itself, linked from Core.Series rather than referenced: DualSeries is
+      built ON LaurentSeries, and a project reference would drag in that assembly's own Scalar
+      alias and its own compilation of the whole chain.
+    -->
+    <Compile Include="../AberrationCalculator.Core.Series/LaurentSeries.cs"
+             Link="linked/LaurentSeries.cs" />
+    <Compile Include="../AberrationCalculator.Core.Series/LaurentMath.cs"
+             Link="linked/LaurentMath.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <CoreSource Include="../AberrationCalculator.Core/Compatibility.cs" />
+    <CoreSource Include="../AberrationCalculator.Core/Enums/Enums.cs" />
+    <CoreSource Include="../AberrationCalculator.Core/Models/Surface.cs" />
+    <CoreSource Include="../AberrationCalculator.Core/Models/OpticalSystem.cs" />
+    <CoreSource Include="../AberrationCalculator.Core/RayTrace/ParaxialTrace.cs" />
+    <CoreSource Include="../AberrationCalculator.Core/RayTrace/RealRayTrace.cs" />
+    <CoreSource Include="../AberrationCalculator.Core/RayTrace/LocalFrame.cs" />
+    <CoreSource Include="../AberrationCalculator.Core/Aberrations/BuchdahlCoefficients.cs" />
+    <CoreSource Include="../AberrationCalculator.Core/Aberrations/BuchdahlScheme.cs" />
+    <CoreSource Include="../AberrationCalculator.Core/Aberrations/BuchdahlTableI.cs" />
+    <CoreSource Include="../AberrationCalculator.Core/Aberrations/BuchdahlIdentities.cs" />
+    <CoreSource Include="../AberrationCalculator.Core/Aberrations/BuchdahlSecondaryQ.cs" />
+    <CoreSource Include="../AberrationCalculator.Core/Aberrations/BuchdahlTertiaryIdentities.cs" />
+    <CoreSource Include="../AberrationCalculator.Core/Aberrations/TertiaryCoefficients.cs" />
+    <CoreSource Include="../AberrationCalculator.Core/Aberrations/BuchdahlAsphericScheme.cs" />
+    <CoreSource Include="../AberrationCalculator.Core/Aberrations/TertiaryCubics.cs" />
+    <CoreSource Include="../AberrationCalculator.Core/Aberrations/TertiaryScriptT.cs" />
+    <CoreSource Include="../AberrationCalculator.Core/Aberrations/AsphericSchemeIncrements.cs" />
+    <CoreSource Include="../AberrationCalculator.Core/Aberrations/Prms.cs" />
+    <CoreSource Include="../AberrationCalculator.Core/Nat/Sensitivity.cs" />
+
+    <Compile Include="@(CoreSource)" Link="linked/%(Filename)%(Extension)" />
+  </ItemGroup>
+
+</Project>

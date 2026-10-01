@@ -1,0 +1,38 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.11.1" />
+    <PackageReference Include="xunit" Version="2.9.2" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="2.8.2" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Test fixtures travel with the repository, so a fresh clone can run the suite. -->
+    <None Include="../fixtures/**/*" CopyToOutputDirectory="PreserveNewest" LinkBase="fixtures" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\AberrationCalculator.Core\AberrationCalculator.Core.csproj" />
+    <ProjectReference Include="..\..\src\AberrationCalculator.IO\AberrationCalculator.IO.csproj" />
+    <ProjectReference Include="..\..\src\AberrationCalculator.Mcp\AberrationCalculator.Mcp.csproj" />
+    <!-- So that the command line's own argument handling is tested, and not only the
+         report builders it calls. -->
+    <ProjectReference Include="..\..\src\AberrationCalculator.Cli\AberrationCalculator.Cli.csproj" />
+    <ProjectReference Include="..\..\src\AberrationCalculator.Optimize\AberrationCalculator.Optimize.csproj" />
+    <ProjectReference Include="..\..\src\AberrationCalculator.Optiland\AberrationCalculator.Optiland.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- The part of the MCP setup GUI that can damage somebody's config, linked in as
+         source so it is tested. The GUI targets net8.0-windows and cannot be referenced
+         from a net8.0 test project; this file touches no WPF, so it compiles here. -->
+    <Compile Include="$(MSBuildThisFileDirectory)..\..\tools\mcpsetup\ClaudeConfig.cs" Link="ClaudeConfig.cs" />
+  </ItemGroup>
+
+</Project>

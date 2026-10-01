@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Finds OpticStudio and writes Forbes7\ZemaxPaths.props. Run once per machine.
+    It references nothing from OpticStudio itself, so it builds on a machine that
+    has never had OpticStudio installed - which is the point: it is what you run
+    BEFORE the other project can build.
+  -->
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net48</TargetFramework>
+    <RootNamespace>FixBinaries</RootNamespace>
+    <AssemblyName>FixBinaries</AssemblyName>
+    <UseWPF>true</UseWPF>
+    <UseWindowsForms>true</UseWindowsForms>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+  </PropertyGroup>
+
+</Project>

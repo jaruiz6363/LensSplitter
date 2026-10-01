@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Registers the abcalc MCP server with the Claude clients on this machine.
+
+    It is a separate program for the same reason FixBinaries is: the answer differs on
+    every machine and belongs in a config file that is nobody else's business, so it is
+    generated rather than committed.
+  -->
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <UseWPF>true</UseWPF>
+    <AssemblyName>mcp-setup</AssemblyName>
+    <RootNamespace>AberrationCalculator.McpSetup</RootNamespace>
+  </PropertyGroup>
+
+</Project>

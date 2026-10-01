@@ -1,0 +1,120 @@
+CC ============================================================================
+CC CORNING_B.AGF -- Corning narrowband prescription glasses
+CC ============================================================================
+CC Catalog version: 1.1   (2026-05-16)
+CC Compiled by Synapse Optics for use with optical design software
+CC supporting the Zemax AGF (Ascii Glass File) format.
+CC
+CC ----- History -----
+CC v1.0 (2026-05-08): Initial release. Contained Sellmeier fits for Corning
+CC HPFS 7980 / 7979 / 8655 bulk fused silica, plus narrowband Conrady-fit
+CC prescription glasses at 193 nm (ArF) and 266 nm (4xNd:YAG).
+CC
+CC v1.1 (2026-05-16): Removed the three HPFS bulk-silica Sellmeier entries
+CC (HPFS_7980, HPFS_7979, HPFS_8655). Those entries used V_d=67.83, which is
+CC inconsistent with the Corning brochure value of 67.80. The corrected
+CC bulk-silica entries now live in CORNING_FS.AGF along with vendor-name
+CC aliases (C79-80, F_SILICA, FUSED). CORNING_B.AGF retains only the
+CC narrowband prescription glasses, which are not duplicated elsewhere.
+CC ============================================================================
+CC
+CC NM-line slot meaning (per OpticStudio "Glass Catalog Format"):
+CC   NM <name> <formula> <MIL> <Nd> <Vd> <ExcludeSubs> <Status> <MeltFreq>
+CC   MIL          = MIL-spec catalog number; use 0 if not applicable.
+CC   Nd           = refractive index at d-line (587.56 nm), 1.0-2.0 typical.
+CC   Vd           = Abbe number at d-line, > 0.
+CC   ExcludeSubs  = 1 to exclude from glass substitution, else 0.
+CC   Status       = 0 standard, 1 preferred, 2 obsolete, 3 special, 4 melt,
+CC                  5 inquire, 6 experimental.
+CC   MeltFreq     = melt frequency, 0..n (informational).
+CC ED <TCE-30/70> <TCE+20/300> <density> <dPgF> <ignore_thermal_exp> <Status>
+CC CD <K1> <L1> <K2> <L2> <K3> <L3> 0 0 0 0    (Sellmeier 1, formula 2)
+CC    or <n0> <A> <B> 0 0 0 0 0 0 0             (Conrady, formula 5)
+CC TD six dn/dT coefficients + reference temperature
+CC OD six environmental data
+CC LD <lambda_min> <lambda_max>     in micrometers
+CC IT <wavelength_um> <int_trans> <thickness_mm>
+CC
+CC IMPORTANT -- the ED-line last field MUST be 0, not 1.
+CC Setting it to 1 ("Preferred") on a Sellmeier or Conrady glass is
+CC mishandled by some readers: the
+CC prescription report shows the correct |n| but cardinal-point /
+CC ray-trace evaluation uses a model-glass approximation that gives a
+CC very different index and wrong EFL. Empirically verified 2026-05-14.
+CC See repo memory: project_zemax_agf_ed_status_trap.
+CC
+CC ============================================================================
+CC ArF / 193 nm narrowband prescription glasses
+CC ============================================================================
+CC FS_P and CAF2_P are narrowband prescription materials defined exactly at
+CC three wavelengths in the ArF excimer band:
+CC     WV1 = 0.193396 um
+CC     WV2 = 0.193400 um
+CC     WV3 = 0.193404 um
+CC
+CC Dispersion is fit using the Conrady formula (Zemax FormulaType 5):
+CC     n(L) = n0 + A/L + B/L^3.5         (L in micrometers)
+CC The 3 unknowns are solved exactly from the 3 (lambda, n) constraints,
+CC giving a fit error at machine precision (~1e-15).
+CC
+CC IMPORTANT: These coefficients are valid ONLY in a narrow band around
+CC 193.4 nm. Conrady extrapolation outside the LD range below is meaningless.
+CC ============================================================================
+CC
+NM FS_P 5 0 1.5601985 67.83 0 0 1
+ED 0.520000 0.570000 2.200000 0.000000 0 0
+CD 1.0967292267e+00 1.0267276883e-01 -2.1445978575e-04 0 0 0 0 0 0 0
+TD 0.000000 0.000000 0.000000 0.000000 0.000000 0.000000 22.000000
+OD -1.000000 -1.000000 -1.000000 -1.000000 -1.000000 -1.000000
+LD 0.193300 0.193500
+IT 0.193400 0.99975 1.000000
+CC
+CC ----------------------------------------------------------------------------
+CC
+NM CAF2_P 5 0 1.5013257 95.10 0 0 1
+ED 18.850000 18.850000 3.180000 0.000000 0 0
+CD 1.2126070619e+00 6.3960105646e-02 -1.3359799400e-04 0 0 0 0 0 0 0
+TD 0.000000 0.000000 0.000000 0.000000 0.000000 0.000000 22.000000
+OD -1.000000 -1.000000 -1.000000 -1.000000 -1.000000 -1.000000
+LD 0.193300 0.193500
+IT 0.193400 0.99950 1.000000
+CC
+CC ----------------------------------------------------------------------------
+CC
+CC ============================================================================
+CC 266 nm narrowband prescription glasses (4th harmonic Nd:YAG)
+CC ============================================================================
+CC FS_P2 and CAF2_P2 are narrowband prescription materials defined exactly at
+CC three wavelengths in the 266 nm band:
+CC     WV1 = 0.265985 um
+CC     WV2 = 0.266000 um
+CC     WV3 = 0.266015 um
+CC
+CC Conrady formula (Zemax FormulaType 5):  n(L) = n0 + A/L + B/L^3.5
+CC Three coefficients solved exactly from the three constraints; fit error
+CC at machine precision (~1e-14).
+CC
+CC IMPORTANT: Coefficients are valid ONLY in a narrow band around 266 nm.
+CC Conrady extrapolation outside the LD range is meaningless.
+CC ============================================================================
+CC
+NM FS_P2 5 0 1.4997923 67.83 0 0 1
+ED 0.520000 0.570000 2.200000 0.000000 0 0
+CD 1.3186589631e+00 5.5189681256e-02 -2.5574751629e-04 0 0 0 0 0 0 0
+TD 0.000000 0.000000 0.000000 0.000000 0.000000 0.000000 22.000000
+OD -1.000000 -1.000000 -1.000000 -1.000000 -1.000000 -1.000000
+LD 0.265900 0.266100
+IT 0.266000 0.99975 1.000000
+CC
+CC ----------------------------------------------------------------------------
+CC
+NM CAF2_P2 5 0 1.4620602 95.10 0 0 1
+ED 18.850000 18.850000 3.180000 0.000000 0 0
+CD 1.0325729059e+01 -3.3090379659e+00 3.4715427996e-02 0 0 0 0 0 0 0
+TD 0.000000 0.000000 0.000000 0.000000 0.000000 0.000000 22.000000
+OD -1.000000 -1.000000 -1.000000 -1.000000 -1.000000 -1.000000
+LD 0.265900 0.266100
+IT 0.266000 0.99950 1.000000
+CC
+CC ----------------------------------------------------------------------------
+CC End of catalog

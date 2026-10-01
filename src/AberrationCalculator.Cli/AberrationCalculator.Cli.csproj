@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <AssemblyName>abcalc</AssemblyName>
+    <RootNamespace>AberrationCalculator.Cli</RootNamespace>
+    <InvariantGlobalization>true</InvariantGlobalization>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\AberrationCalculator.Core\AberrationCalculator.Core.csproj" />
+    <ProjectReference Include="..\AberrationCalculator.IO\AberrationCalculator.IO.csproj" />
+    <ProjectReference Include="..\AberrationCalculator.Optimize\AberrationCalculator.Optimize.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- The catalogs travel with the program, so a published copy runs on its own. In the
+         repository the program finds them anyway, by walking up from where it runs. -->
+    <None Include="..\..\catalogs\Glass\*.AGF" LinkBase="catalogs\Glass" CopyToPublishDirectory="PreserveNewest" />
+    <None Include="..\..\catalogs\Substitution\*.AGF" LinkBase="catalogs\Substitution" CopyToPublishDirectory="PreserveNewest" />
+  </ItemGroup>
+</Project>

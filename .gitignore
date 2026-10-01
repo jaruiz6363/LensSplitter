@@ -1,0 +1,28 @@
+bin/
+obj/
+*.user
+.vs/
+.idea/
+artifacts/
+
+# Written by the FixBinaries project, never committed: it names where OpticStudio is
+# installed and which release it is, and that is nobody else's business.
+ZemaxPaths.props
+
+# Runtime logs. One got committed once; it named an unrelated private project.
+logs/
+*.log
+
+# Machine-specific: it names where this user's OpticStudio macro folder is, which is
+# the same reason ZemaxPaths.props is not committed.
+.claude/settings.local.json
+
+# Office lock files. Opening a document in Word or Excel drops a ~$name beside it;
+# it is a few hundred bytes of session state and it vanishes when the file is closed.
+~$*
+
+# The embedded Python that tools/setup-python.ps1 installs Optiland into.
+python-embed/
+__pycache__/
+ccl/buch7_asph.txt
+ccl/buch7.txt

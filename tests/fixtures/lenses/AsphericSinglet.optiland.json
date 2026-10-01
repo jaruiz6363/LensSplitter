@@ -1,0 +1,165 @@
+{
+    "version": 1.0,
+    "name": null,
+    "aperture": {
+        "type": "EPD",
+        "value": 20.0
+    },
+    "fields": {
+        "fields": [
+            {
+                "x": 0.0,
+                "y": 0.0,
+                "vx": 0.0,
+                "vy": 0.0,
+                "weight": 1.0
+            },
+            {
+                "x": 0.0,
+                "y": 0.5,
+                "vx": 0.0,
+                "vy": 0.0,
+                "weight": 1.0
+            }
+        ],
+        "telecentric": false,
+        "field_definition": {
+            "field_type": "AngleField"
+        }
+    },
+    "wavelengths": {
+        "wavelengths": [
+            {
+                "value": 0.55,
+                "is_primary": true,
+                "unit": "um",
+                "weight": 1.0
+            }
+        ],
+        "polarization": "ignore"
+    },
+    "apodization": null,
+    "pickups": [],
+    "solves": {
+        "solves": []
+    },
+    "surface_group": {
+        "surfaces": [
+            {
+                "type": "ObjectSurface",
+                "geometry": {
+                    "type": "Plane",
+                    "cs": {
+                        "x": 0.0,
+                        "y": 0.0,
+                        "z": -Infinity,
+                        "rx": 0.0,
+                        "ry": 0.0,
+                        "rz": 0.0,
+                        "reference_cs": null
+                    },
+                    "radius": Infinity
+                },
+                "material_post": {
+                    "type": "IdealMaterial",
+                    "propagation_model": {
+                        "class": "HomogeneousPropagation"
+                    },
+                    "index": 1.0,
+                    "absorp": 0.0
+                },
+                "comment": ""
+            },
+            {
+                "type": "Surface",
+                "thickness": 292.8557,
+                "geometry": {
+                    "type": "EvenAsphere",
+                    "cs": {
+                        "x": 0.0,
+                        "y": 0.0,
+                        "z": 0.0,
+                        "rx": 0.0,
+                        "ry": 0.0,
+                        "rz": 0.0,
+                        "reference_cs": null
+                    },
+                    "radius": 100.0,
+                    "conic": -0.5,
+                    "tol": 1e-06,
+                    "max_iter": 100,
+                    "coefficients": [
+                        0.0,
+                        1e-07,
+                        2e-11,
+                        3e-15
+                    ]
+                },
+                "material_post": {
+                    "type": "Material",
+                    "propagation_model": {
+                        "class": "HomogeneousPropagation"
+                    },
+                    "filename": "C:\\GIT\\AberrationCalculator\\AberrationCalculator\\python-embed\\Lib\\site-packages\\optiland\\database\\data-nk\\glass\\schott\\N-BK7.yml",
+                    "name": "N-BK7",
+                    "reference": null,
+                    "catalog": null,
+                    "match_policy": "warn",
+                    "robust_search": null,
+                    "min_wavelength": null,
+                    "max_wavelength": null
+                },
+                "is_stop": true,
+                "aperture": null,
+                "comment": "",
+                "interaction_model": {
+                    "type": "RefractiveReflectiveModel",
+                    "is_reflective": false,
+                    "coating": null,
+                    "bsdf": null
+                }
+            },
+            {
+                "type": "Surface",
+                "thickness": 0.0,
+                "geometry": {
+                    "type": "Plane",
+                    "cs": {
+                        "x": 0.0,
+                        "y": 0.0,
+                        "z": 292.8557,
+                        "rx": 0.0,
+                        "ry": 0.0,
+                        "rz": 0.0,
+                        "reference_cs": null
+                    },
+                    "radius": Infinity
+                },
+                "material_post": {
+                    "type": "IdealMaterial",
+                    "propagation_model": {
+                        "class": "HomogeneousPropagation"
+                    },
+                    "index": 1.0,
+                    "absorp": 0.0
+                },
+                "is_stop": false,
+                "aperture": null,
+                "comment": "",
+                "interaction_model": {
+                    "type": "RefractiveReflectiveModel",
+                    "is_reflective": false,
+                    "coating": null,
+                    "bsdf": null
+                }
+            }
+        ]
+    },
+    "ray_tracer": {
+        "ray_aiming_config": {
+            "mode": "paraxial",
+            "max_iter": 10,
+            "tol": 1e-06
+        }
+    }
+}

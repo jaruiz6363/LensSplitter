@@ -1,0 +1,45 @@
+<Window x:Class="FixBinaries.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="FixBinaries - point Forbes7 at OpticStudio"
+        Height="470" Width="720" WindowStartupLocation="CenterScreen">
+    <Grid Margin="14">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <TextBlock Grid.Row="0" TextWrapping="Wrap" Margin="0,0,0,10">
+            The Forbes7 project needs to know where OpticStudio is. That path is not in the
+            repository - it would publish the install location and the release - so it is
+            written here instead, into a file the project imports and git ignores.
+        </TextBlock>
+
+        <ListBox Grid.Row="1" x:Name="lstInstallations" Margin="0,0,0,8"
+                 SelectionChanged="Installations_SelectionChanged" />
+
+        <Grid Grid.Row="2" Margin="0,0,0,8">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <TextBox Grid.Column="0" x:Name="txtPath" TextChanged="Path_Changed"
+                     VerticalContentAlignment="Center" Padding="4" />
+            <Button Grid.Column="1" Content="Browse..." Margin="8,0,0,0" Padding="14,4"
+                    Click="Browse_Click" />
+        </Grid>
+
+        <TextBlock Grid.Row="3" x:Name="txtFound" FontFamily="Consolas" Margin="0,0,0,8" />
+
+        <Button Grid.Row="4" x:Name="btnGenerate" Content="Write ZemaxPaths.props"
+                HorizontalAlignment="Left" Padding="16,6" IsEnabled="False"
+                Click="Generate_Click" />
+
+        <TextBlock Grid.Row="5" x:Name="txtStatus" TextWrapping="Wrap" Margin="0,10,0,0"
+                   Foreground="#333" />
+    </Grid>
+</Window>

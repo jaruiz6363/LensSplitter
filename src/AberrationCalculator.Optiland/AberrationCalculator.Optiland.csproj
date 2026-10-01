@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <RootNamespace>AberrationCalculator.Optiland</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="pythonnet" Version="3.0.5" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- The Optiland calls live in Python; they travel with the assembly. -->
+    <None Include="python/*.py" CopyToOutputDirectory="PreserveNewest" LinkBase="python" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\AberrationCalculator.Core\AberrationCalculator.Core.csproj" />
+  </ItemGroup>
+</Project>
