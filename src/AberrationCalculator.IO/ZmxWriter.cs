@@ -101,7 +101,7 @@ namespace AberrationCalculator.Core.IO
                     sb.AppendLine($"  DIAM {G(s.SemiDiameter)} 1 0 0 1 \"\"");
                 if (s.Conic != 0)
                     sb.AppendLine("  CONI " + G(s.Conic));
-                if (s.InnerRadius > 0)
+                if (s.InnerRadius > 0 || s.ClapOuterRadius > 0)
                 {
                     double outer = s.ClapOuterRadius > 0 ? s.ClapOuterRadius : s.SemiDiameter;
                     sb.AppendLine($"  CLAP {G(s.InnerRadius)} {G(outer)} 0");
