@@ -212,17 +212,16 @@ namespace AberrationCalculator.Core.IO
             }
 
             // Stock-lens EPD override: if Aperture is EPD-type and the stop surface
-            // has a CLAP outer radius defined, replace the ENPD-derived value with
-            // the optical CA diameter (= 2 × CLAP outer radius). Vendor stock-lens
-            // .zmx files set ENPD = mechanical OD (the part's full diameter), but
-            // the lens's effective optical aperture is the smaller CLAP zone. Using
-            // CLAP as the EPD prevents marginal rays from being launched outside
-            // the lens's good optical region (which previously caused rays to
-            // appear "through air" past the lens edge in layout drawings).
+            // has a CLAP outer radius SMALLER than the ENPD radius, the CLAP diameter
+            // becomes the EPD. Vendor stock-lens .zmx files set ENPD = mechanical OD
+            // (the part's full diameter), but the lens's effective optical aperture is
+            // the smaller CLAP zone. A CLAP larger than ENPD (a telescope primary's
+            // annulus, CLAP 26 80 under ENPD 150) does not limit the beam, so ENPD
+            // stands - the override used to widen such a pupil to the CLAP.
             if (system.Aperture.Type == ApertureType.EPD)
             {
                 double stopClapOuter = ExtractStopClapOuter(lines, system.StopSurfaceIndex);
-                if (stopClapOuter > 0)
+                if (stopClapOuter > 0 && stopClapOuter * 2.0 < system.Aperture.Value)
                     system.Aperture = new Aperture(ApertureType.EPD, stopClapOuter * 2.0);
             }
 
@@ -377,9 +376,8 @@ namespace AberrationCalculator.Core.IO
         /// <summary>
         /// Walk the raw .zmx lines and return the CLAP outer radius written on
         /// the given stop-surface block, or 0 if no CLAP keyword appears there.
-        /// Independent re-scan because ParseSurfaceBlock writes CLAP into
-        /// surface.ClapOuterRadius only when MEMA hasn't already populated it
-        /// — so the surface model alone can't tell us the original CLAP value.
+        /// Reads the file rather than the surface model, so the answer does not
+        /// depend on what later passes do to the parsed surfaces.
         /// </summary>
         private static double ExtractStopClapOuter(string[] lines, int stopIndex)
         {
@@ -910,28 +908,19 @@ namespace AberrationCalculator.Core.IO
                         // CLAP inner_radius outer_radius x_decenter
                         // inner_radius : central hole (annular aperture, e.g. Cassegrain primary).
                         // outer_radius : optical clear-aperture zone (the "good" optical region).
-                        //
-                        // For stock-lens imports we prefer MEMA (mechanical extent) over CLAP
-                        // for ClapOuterRadius (the drawn extent). Apply CLAP only if MEMA
-                        // hasn't already populated it — keeps the answer order-independent
-                        // regardless of which keyword the file happens to carry first.
                         // The CLAP outer is RE-EXTRACTED at end of Read() to override the
                         // system EPD aperture (see ExtractStopClapOuter).
                         if (parts.Length >= 2 && TryParseDouble(parts[1], out double clapInner))
                             surface.InnerRadius = clapInner;
-                        if (parts.Length >= 3 && TryParseDouble(parts[2], out double clapOuter)
-                            && surface.ClapOuterRadius <= 0)
+                        if (parts.Length >= 3 && TryParseDouble(parts[2], out double clapOuter))
                             surface.ClapOuterRadius = clapOuter;
                         break;
 
                     case "MEMA":
-                        // MEMA semi_diameter ... — mechanical maximum aperture (full lens OD / 2).
-                        // Drives ClapOuterRadius (drawn extent) for stock-lens imports, where
-                        // we want the layout to show the part's mechanical edge, not just the
-                        // optical CA zone. Overrides any CLAP value previously set on this
-                        // surface (CLAP only sets ClapOuterRadius when ClapOuterRadius is 0).
-                        if (parts.Length >= 2 && TryParseDouble(parts[1], out double memaR) && memaR > 0)
-                            surface.ClapOuterRadius = memaR;
+                        // MEMA semi_diameter ... - the mechanical semi-diameter (lens OD / 2). In
+                        // ZEMAX it blocks no ray: it is the drawn edge of the part. Not read: it
+                        // used to be written into ClapOuterRadius, where it replaced the real
+                        // clear aperture (CLAP) and went back out as the CLAP on export.
                         break;
 
                     case "OBSC":
