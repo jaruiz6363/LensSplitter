@@ -83,20 +83,40 @@ public static class RealRayTrace
 
     /// <summary>
     /// <see cref="TraceRecord(OpticalSystem, Scalar[], ParaxialResult, Scalar, Scalar, Scalar,
-    /// bool)"/> reporting the per-surface INCIDENCE as well - see the overload of
-    /// <see cref="TraceRecordFrom"/> that fills the same arrays.
+    /// bool)"/> reporting the per-surface INCIDENCE as well, and optionally the optical path -
+    /// see the overload of <see cref="TraceRecordFrom"/> that fills the same arrays. The optical
+    /// path is measured from the launch point at surface 1's vertex plane.
     /// </summary>
     public static SurfaceHit[] TraceRecord(OpticalSystem system, Scalar[] indices,
                                            ParaxialResult paraxial,
                                            Scalar fieldDeg, Scalar py, Scalar pz,
                                            bool atParaxialFocus,
-                                           Scalar[]? incidenceX, Scalar[]? incidenceY)
+                                           Scalar[]? incidenceX, Scalar[]? incidenceY,
+                                           Scalar[]? opticalPath = null)
     {
         if (system == null) throw new ArgumentNullException(nameof(system));
         if (paraxial == null) throw new ArgumentNullException(nameof(paraxial));
         var (x, y, dx, dy, dz) = Launch(system, paraxial, fieldDeg, py, pz);
         return TraceRecordFrom(system, indices, paraxial, x, y, dx, dy, dz, atParaxialFocus,
-                               incidenceX, incidenceY);
+                               incidenceX, incidenceY, opticalPath);
+    }
+
+    /// <summary>
+    /// The ray <see cref="Trace"/> would launch for this field and pupil point, at surface 1's
+    /// vertex plane: its sagittal and meridional heights there and its direction, unnormalised.
+    ///
+    /// <para>Public for a caller that needs to know where the optical path of
+    /// <see cref="TraceRecordFrom(OpticalSystem, Scalar[], ParaxialResult, Scalar, Scalar,
+    /// Scalar, Scalar, Scalar, bool, Scalar[], Scalar[], Scalar[])"/> starts: that path is
+    /// measured from this point, which lies on a plane rather than on a wavefront, so comparing
+    /// two rays' paths needs it.</para>
+    /// </summary>
+    public static (Scalar X, Scalar Y, Scalar Dx, Scalar Dy, Scalar Dz) LaunchRay(
+        OpticalSystem system, ParaxialResult paraxial, Scalar fieldDeg, Scalar py, Scalar pz)
+    {
+        if (system == null) throw new ArgumentNullException(nameof(system));
+        if (paraxial == null) throw new ArgumentNullException(nameof(paraxial));
+        return Launch(system, paraxial, fieldDeg, py, pz);
     }
 
     /// <summary>
@@ -146,7 +166,16 @@ public static class RealRayTrace
         // Slide along that line from the object to surface one's vertex plane. The fraction is
         // the same in every coordinate, the line being straight.
         Scalar fraction = SMath.Abs(span) > 1e-14 ? distance / span : 0.0;
-        return (fraction * dx, height + fraction * dy, dx, dy, dz);
+        Scalar x1 = fraction * dx, y1 = height + fraction * dy;
+
+        // The light leaves the object towards the lens whatever side of the object the pupil is
+        // on. A virtual entrance pupil can lie BEHIND the object - a lens whose stop is imaged
+        // back past it - and then the object-to-pupil direction points away from the lens: the
+        // ray would be traced along the right line but backwards, every transfer a negative
+        // distance, and its optical path, so its wavefront, negated. The pupil's own radius is
+        // then negative too (the paraxial EPD carries the sign), so +py is still the upper rim.
+        if (span < 0.0) { dx = -dx; dy = -dy; dz = -dz; }
+        return (x1, y1, dx, dy, dz);
     }
 
     /// <summary>
@@ -234,12 +263,30 @@ public static class RealRayTrace
     /// documents the direction AFTER refraction, which is what a merit-function operand asking
     /// for an angle of emergence wants. These are the directions before.</para>
     /// </summary>
+    /// <param name="opticalPath">
+    /// If given, filled with the OPTICAL PATH from the launch point to each surface the ray met:
+    /// entry <c>i</c> is the sum, over every segment up to surface <c>i</c>, of the index of the
+    /// medium times the length travelled in it, indexed like the result. Entry 0 is zero, and an
+    /// entry the ray never reached is left as it was.
+    ///
+    /// <para>Each length is SIGNED, measured along the ray's own direction, because the launch
+    /// point is only a reference point on the ray and not where the light starts: a surface
+    /// whose sag carries it in front of its vertex plane is met by going BACK from the launch
+    /// point, and so is an image plane that a diverging pencil leaves behind it. Signed, the
+    /// path is the one a wavefront calculation wants - the difference between two rays' paths
+    /// is the phase difference between them wherever they are compared. Unsigned, it would be
+    /// the distance a ray happened to cover, which is not.</para>
+    ///
+    /// <para>The indices are taken unsigned. A mirror reverses the ray, not the index, and the
+    /// lengths after it are positive because they are measured along the reversed direction.</para>
+    /// </param>
     public static SurfaceHit[] TraceRecordFrom(OpticalSystem system, Scalar[] indices,
                                                ParaxialResult paraxial,
                                                Scalar x, Scalar y,
                                                Scalar dx, Scalar dy, Scalar dz,
                                                bool atParaxialFocus,
-                                               Scalar[]? incidenceX, Scalar[]? incidenceY)
+                                               Scalar[]? incidenceX, Scalar[]? incidenceY,
+                                               Scalar[]? opticalPath = null)
     {
         if (system == null) throw new ArgumentNullException(nameof(system));
         if (indices == null) throw new ArgumentNullException(nameof(indices));
@@ -256,6 +303,13 @@ public static class RealRayTrace
         Scalar z = 0.0;
         Scalar nBefore = indices.Length > 0 ? indices[0] : 1.0;
 
+        // The optical path so far. The frames the ray passes through are rigid - a shift along
+        // the axis between surfaces, a decentre and a rotation at a perturbed one - so a length
+        // measured in any of them is the length in all of them, and the running sum needs no
+        // transform of its own.
+        Scalar path = 0.0;
+        if (opticalPath != null && opticalPath.Length > 0) opticalPath[0] = 0.0;
+
         for (int i = 1; i <= last; i++)
         {
             var s = system.Surfaces[i];
@@ -267,7 +321,12 @@ public static class RealRayTrace
             bool perturbed = LocalFrame.IsPerturbed(s);
             if (perturbed) LocalFrame.Into(s, ref x, ref y, ref z, ref dx, ref dy, ref dz);
 
-            if (!Intersect(s, ref x, ref y, ref z, dx, dy, dz)) return hits;
+            if (!Intersect(s, ref x, ref y, ref z, dx, dy, dz, out Scalar travelled)) return hits;
+
+            // Travelled in the medium BEFORE this surface. The direction is a unit vector, so
+            // the Newton parameter is the length itself, signed along the ray.
+            path += SMath.Abs(nBefore) * travelled;
+            if (opticalPath != null && i < opticalPath.Length) opticalPath[i] = path;
 
             // The incidence, before refraction and in this surface's own frame. Zero when the
             // ray points at the centre of curvature.
@@ -309,17 +368,21 @@ public static class RealRayTrace
             : 0.0;
         Scalar tImage = (target - z) / dz;
         hits[count - 1] = new SurfaceHit(x + tImage * dx, y + tImage * dy, 0.0, dx, dy, dz, true);
+        if (opticalPath != null && count - 1 < opticalPath.Length)
+            opticalPath[count - 1] = path + SMath.Abs(nBefore) * tImage;
         return hits;
     }
 
     /// <summary>
     /// Advances the ray to its intersection with the surface, by Newton iteration on the sag.
     /// The starting guess is the flat-surface crossing, which is exact for a plane and close
-    /// for anything this program handles.
+    /// for anything this program handles. <paramref name="travelled"/> is how far the ray moved
+    /// along its direction to get there, negative if it went back.
     /// </summary>
     private static bool Intersect(Surface s, ref Scalar x, ref Scalar y, ref Scalar z,
-                                  Scalar dx, Scalar dy, Scalar dz)
+                                  Scalar dx, Scalar dy, Scalar dz, out Scalar travelled)
     {
+        travelled = 0.0;
         if (SMath.Abs(dz) < 1e-14) return false;
 
         Scalar t = -z / dz;
@@ -370,6 +433,7 @@ public static class RealRayTrace
             if (converged)
             {
                 x += t * dx; y += t * dy; z += t * dz;
+                travelled = t;
                 return true;
             }
         }

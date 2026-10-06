@@ -616,6 +616,25 @@ alternatives and gives the reasoning. What it does not do is MEASURE any of it, 
 literature's importance-grows-with-dimensionality finding is a caution for basin hopping
 specifically, where twenty variables is ordinary.
 
+**In the local optimizer, reflection is not enough on its own: an active set holds a variable on
+its limit.** When a variable's optimum lies beyond its limit, every damped least-squares step
+pushes it outward; folded back inside, it returns as far as it went over, and the next step pushes
+out again. Each round gains a sliver, the variable hovers just inside the limit and never on it,
+and the improvement test never fires. Measured on the Cooke triplet with CV1 bounded at 90% of its
+unbounded optimum: runs went to the 6,000-iteration cap, or stopped as "converged" 5% above the
+constrained optimum (the merit with CV1 fixed on the limit and the rest optimized).
+
+So `LocalOptimizer` now does what an active-set method does (`OptimizerOptions.UseActiveSetBounds`,
+on by default). A step that would cross a limit stops exactly on it rather than folding back. A
+variable on its limit whose descent direction, −Jᵀr, points out of range is held there: its
+column leaves the normal equations, so the other variables' step is the one they would take with
+it fixed, and that is not the clamp argued against above, which leaves the Jacobian describing a
+variable that cannot move. It is released as soon as the descent points back inside. The same
+runs now converge in tens of iterations, on the limit, at the constrained optimum to seven figures
+(`OptimizerTests.AVariableWhoseOptimumIsBeyondItsLimitIsHeldOnIt`). This is the fix LensHH-LT
+made for its own Reflect bounds in 1.0.161. Reflection still does the folding everywhere a step is
+not a descent step: the hops of basin hopping and the probes of Hooke–Jeeves.
+
 A variable that touches either end of a **pickup** is refused. Pickups are resolved when a file is
 read and are not maintained afterwards, so optimizing one end of a cemented pair would part the
 cement.
