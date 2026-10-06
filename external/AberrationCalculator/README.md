@@ -89,7 +89,10 @@ sigmoid**: a step past a limit is folded back inside, and the gradient keeps mag
 clamp would pin the variable and discard the rest of the step, leaving the search stalled against
 a boundary with a gradient it cannot act on; a sigmoid's derivative vanishes *at* the bound, so a
 variable pressed against a limit goes numb and nothing brings it back when the design later wants
-it.
+it. In local descent an active set completes it: a step stops on a limit instead of folding back,
+and a variable whose optimum lies beyond its limit is held there, out of the normal equations,
+until the descent turns inward. Without that, such a variable hovered just inside its limit and
+runs stalled short of the constrained optimum.
 
 The report says what MOVED - surface by surface, in radii, thicknesses, glass names, conics and
 aspheric terms rather than in the optimizer's own variables - together with the merit it started

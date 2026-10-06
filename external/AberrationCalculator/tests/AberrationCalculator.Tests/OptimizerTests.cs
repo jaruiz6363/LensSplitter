@@ -193,4 +193,103 @@ public class OptimizerTests
             if (merit.Operands[i].Type == type) return r.Values[i];
         throw new Xunit.Sdk.XunitException("no " + type + " operand in this merit function");
     }
+
+    /// <summary>
+    /// CV1 bounded short of where it wants to go: at 90% of its unbounded optimum from above, or
+    /// 110% from below. Held on the limit by the active set, the run converges at the constrained
+    /// optimum, the merit of the same run with CV1 fixed on the limit, with CV1 exactly on it.
+    /// Without the active set it went to the 6,000-iteration cap, or stopped as converged 5% above
+    /// that optimum, CV1 hovering just inside the limit (<see cref="OptimizerOptions.UseActiveSetBounds"/>).
+    /// </summary>
+    [Theory]
+    [InlineData("1,2,4", StepMethod.Psd3, true)]
+    [InlineData("1,2,4", StepMethod.Lm, true)]
+    [InlineData("1,3,5", StepMethod.Psd3, true)]
+    [InlineData("1,3,5", StepMethod.Lm, true)]
+    [InlineData("1,2,3,4", StepMethod.Psd3, true)]
+    [InlineData("1,2,3,4", StepMethod.Lm, true)]
+    [InlineData("1,2,4", StepMethod.Psd3, false)]
+    [InlineData("1,3,5", StepMethod.Lm, false)]
+    public void AVariableWhoseOptimumIsBeyondItsLimitIsHeldOnIt(string surfaces, StepMethod method, bool upper)
+    {
+        var (bound, constrained) = BoundOnCv1(surfaces, method, upper);
+        var vars = Cv1Bounded(surfaces, upper ? double.NegativeInfinity : bound, upper ? bound : double.PositiveInfinity);
+        var (design, merit) = Triplet(vars, SpotAndFocalLength());
+        var result = new LocalOptimizer(merit, new OptimizerOptions { Method = method }).Run();
+
+        Assert.Equal("converged", result.Stop);
+        Assert.True(result.Iterations < 1000, $"{result.Iterations} iterations");
+        Assert.True(result.HeldOnBounds >= 1, "CV1 not held on its limit");
+        Assert.Equal(bound, design.System.Surfaces[1].Curvature);
+        Assert.True(result.Merit <= constrained * (1.0 + 1e-5), $"merit {result.Merit:G8}, constrained optimum {constrained:G8}");
+    }
+
+    /// <summary>The behaviour the active set replaces, kept as the reference it is measured against.</summary>
+    [Fact]
+    public void WithoutTheActiveSetReflectionStopsShortOfTheConstrainedOptimum()
+    {
+        var (bound, constrained) = BoundOnCv1("1,3,5", StepMethod.Psd3, upper: true);
+        var (_, merit) = Triplet(Cv1Bounded("1,3,5", double.NegativeInfinity, bound), SpotAndFocalLength());
+        var result = new LocalOptimizer(merit, new OptimizerOptions { Method = StepMethod.Psd3, UseActiveSetBounds = false }).Run();
+        Assert.True(result.Merit > constrained * 1.03, $"merit {result.Merit:G8}, constrained optimum {constrained:G8}");
+    }
+
+    /// <summary>With no variable on a limit the active set does nothing: the same run, step for step.</summary>
+    [Fact]
+    public void TheActiveSetChangesNothingWhenNoLimitIsReached()
+    {
+        OptimizeResult Run(bool activeSet)
+        {
+            var vars = Cv1Bounded("1,2,4", -1.0, 1.0);
+            var (_, merit) = Triplet(vars, SpotAndFocalLength());
+            return new LocalOptimizer(merit, new OptimizerOptions { MaxIterations = 300, UseActiveSetBounds = activeSet }).Run();
+        }
+        var off = Run(false);
+        var on = Run(true);
+        Assert.Equal(off.Iterations, on.Iterations);
+        Assert.Equal(off.Merit, on.Merit);
+        Assert.Equal(off.X, on.X);
+        Assert.Equal(0, on.HeldOnBounds);
+    }
+
+    private static Operand[] SpotAndFocalLength() => new[]
+    {
+        new Operand { Type = OperandType.PRMSA, Target = 0.0, Weight = 1.0 },
+        new Operand { Type = OperandType.EFL, Target = 50.0, Weight = 10.0 },
+    };
+
+    /// <summary>Curvature variables on the given surfaces, CV1 (which must be among them) within [lo, hi].</summary>
+    private static VariableSet Cv1Bounded(string surfaces, double lo, double hi)
+    {
+        var set = new VariableSet();
+        foreach (var s in surfaces.Split(','))
+        {
+            int surface = int.Parse(s, System.Globalization.CultureInfo.InvariantCulture);
+            set.Add(surface == 1
+                ? new Variable { Kind = VariableKind.Curvature, Surface = 1, Min = lo, Max = hi }
+                : new Variable { Kind = VariableKind.Curvature, Surface = surface });
+        }
+        return set;
+    }
+
+    /// <summary>
+    /// A limit on CV1 that excludes its unbounded optimum (90% of it as a maximum, or 110% as a
+    /// minimum), and the constrained optimum: the merit with CV1 fixed on that limit and the rest
+    /// of the curvatures optimised.
+    /// </summary>
+    private static (double Bound, double Constrained) BoundOnCv1(string surfaces, StepMethod method, bool upper)
+    {
+        var (free, freeMerit) = Triplet(Cv1Bounded(surfaces, double.NegativeInfinity, double.PositiveInfinity), SpotAndFocalLength());
+        new LocalOptimizer(freeMerit, new OptimizerOptions { Method = method }).Run();
+        double bound = free.System.Surfaces[1].Curvature * (upper ? 0.9 : 1.1);
+
+        var rest = new VariableSet();
+        foreach (var v in Cv1Bounded(surfaces, double.NegativeInfinity, double.PositiveInfinity).Items)
+            if (v.Surface != 1) rest.Add(v);
+        var (fixedDesign, fixedMerit) = Triplet(rest, SpotAndFocalLength());
+        fixedDesign.System.Surfaces[1].Curvature = bound;
+        var constrained = new LocalOptimizer(fixedMerit, new OptimizerOptions { Method = method }).Run();
+        Assert.Equal("converged", constrained.Stop);
+        return (bound, constrained.Merit);
+    }
 }

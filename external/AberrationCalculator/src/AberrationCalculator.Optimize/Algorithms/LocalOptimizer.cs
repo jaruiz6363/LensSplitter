@@ -2,6 +2,7 @@ using System;
 using System.Threading;
 
 using AberrationCalculator.Optimize.Evaluation;
+using AberrationCalculator.Optimize.Variables;
 
 namespace AberrationCalculator.Optimize.Algorithms;
 
@@ -57,6 +58,27 @@ public sealed class OptimizerOptions
     /// <summary>Attempts to re-damp a rejected step before giving up on the iteration.</summary>
     public int MaxDampingRetries { get; set; } = 12;
 
+    /// <summary>
+    /// Active-set bounds. A step that would carry a bounded variable across its limit stops on it
+    /// instead of folding back inside, and a variable on its limit whose descent direction points
+    /// out of range is held there, out of the normal equations, until the descent turns inward.
+    ///
+    /// <para>Without it the optimiser has no notion of an active bound. It keeps stepping a
+    /// variable whose optimum lies beyond its limit outward, <see cref="Reflection"/>
+    /// folds the step back inside, the next step pushes out again, and each round gains a sliver:
+    /// the variable hovers just inside the limit, never on it. On the Cooke triplet with CV1
+    /// bounded short of its optimum, runs went to the 6,000-iteration cap, or stopped as
+    /// "converged" 5% above the constrained optimum; held on the bound, they converge in tens of
+    /// iterations at that optimum (<c>OptimizerTests</c>). The same fix as LensHH-LT's (1.0.161).</para>
+    /// </summary>
+    public bool UseActiveSetBounds { get; set; } = true;
+
+    /// <summary>
+    /// How close to a limit counts as on it, relative to the bounded range, or to max(1, |limit|)
+    /// for a one-sided bound. Steps stop exactly on the limit, so this only has to absorb rounding.
+    /// </summary>
+    public double ActiveBoundTolerance { get; set; } = 1e-6;
+
     public CancellationToken Cancellation { get; set; } = CancellationToken.None;
 }
 
@@ -70,6 +92,9 @@ public sealed class OptimizeResult
     public int Evaluations { get; init; }
     public string Stop { get; init; } = string.Empty;
     public bool Ok { get; init; } = true;
+
+    /// <summary>Variables held on a limit by the active set on the last iteration: the design is constrained there.</summary>
+    public int HeldOnBounds { get; init; }
 }
 
 /// <summary>
@@ -179,7 +204,7 @@ public sealed class LocalOptimizer
         // here, the method carries a term it cannot moderate: too much damping
         // on a variable whose curvature it has overestimated, and no way to relax it.
         double psdScale = _options.PsdInitialScale;
-        int evaluations = 1, iteration = 0;
+        int evaluations = 1, iteration = 0, held = 0;
         string stop = "iteration limit";
 
         // PSD state. The curvature estimate differences two Jacobians, so it needs the previous
@@ -275,6 +300,14 @@ public sealed class LocalOptimizer
                 jtr[a] = -g;
             }
 
+            // Active set: each held variable's step is fixed (onto its limit, zero once there), so
+            // take it out of the normal equations and move it to the right-hand side of the
+            // others: JtJ_ff d_f = JtR_f - JtJ_fh d_h. jtr is the descent direction, -J'r.
+            double[]? heldAt = _options.UseActiveSetBounds
+                ? FindActiveBounds(design.Variables, x, jtr, _options.ActiveBoundTolerance)
+                : null;
+            held = HoldActiveBounds(jtj, jtr, x, heldAt);
+
             // The curvature goes exactly where Dilworth says the damping belongs, and lambda is
             // retained UNDERNEATH it as step control only. Retaining it is a deliberate
             // deviation from the paper: a variable whose estimated curvature is zero would
@@ -290,6 +323,7 @@ public sealed class LocalOptimizer
             }
 
             if (!Cholesky.Solve(jtj, jtr, delta)) { stop = "singular matrix"; break; }
+            double[]? onBound = _options.UseActiveSetBounds ? ApplyActiveSetStep(design.Variables, x, delta, heldAt) : null;
 
             // The real convergence quantities. A finished run has both small; a stuck one has a
             // vanishing step with a gradient that has not vanished.
@@ -305,6 +339,7 @@ public sealed class LocalOptimizer
 
             var trial = new double[n];
             for (int a = 0; a < n; a++) trial[a] = x[a] + delta[a];
+            SetExactlyOnBounds(trial, onBound);
 
             design.Apply(trial);                       // folds the trial inside its bounds
             var probe = _merit.Evaluate(false);
@@ -415,6 +450,113 @@ public sealed class LocalOptimizer
             Evaluations = evaluations,
             Stop = stop,
             Ok = final.Ok,
+            HeldOnBounds = held,
         };
+    }
+
+    /// <summary>
+    /// The active set for this step: a bounded variable within <paramref name="tolerance"/> (see
+    /// <see cref="OptimizerOptions.ActiveBoundTolerance"/>) of a limit whose descent direction
+    /// (<paramref name="descent"/> = -J'r) points out of range. Returns, per variable, the limit it
+    /// is held on (NaN when free), or null when none is held. The coordinates are the physical
+    /// values, which <see cref="VariableSet.Write"/> keeps inside their limits, so a limit is also x.
+    /// </summary>
+    internal static double[]? FindActiveBounds(VariableSet variables, double[] x, double[] descent, double tolerance)
+    {
+        double[]? held = null;
+        for (int i = 0; i < variables.Count; i++)
+        {
+            var v = variables[i];
+            if (!v.IsBounded) continue;
+            bool hasLo = !double.IsNegativeInfinity(v.Min), hasHi = !double.IsPositiveInfinity(v.Max);
+            if ((hasLo && x[i] < v.Min) || (hasHi && x[i] > v.Max)) continue;
+            double scale = hasLo && hasHi ? v.Max - v.Min : Math.Max(1.0, Math.Abs(hasLo ? v.Min : v.Max));
+            double tol = tolerance * scale;
+            double bound = hasLo && x[i] - v.Min <= tol && descent[i] < 0.0 ? v.Min
+                         : hasHi && v.Max - x[i] <= tol && descent[i] > 0.0 ? v.Max
+                         : double.NaN;
+            if (double.IsNaN(bound)) continue;
+            if (held == null)
+            {
+                held = new double[variables.Count];
+                Array.Fill(held, double.NaN);
+            }
+            held[i] = bound;
+        }
+        return held;
+    }
+
+    /// <summary>
+    /// Takes the held variables out of the normal equations: each one's step is fixed (onto its
+    /// limit, zero once there), so its column moves to the right-hand side of the others,
+    /// JtJ_ff d_f = JtR_f - JtJ_fh d_h, and its row and column are cleared. Call before damping.
+    /// Returns how many are held.
+    /// </summary>
+    internal static int HoldActiveBounds(double[,] jtj, double[] jtr, double[] x, double[]? heldAt)
+    {
+        if (heldAt == null) return 0;
+        int n = jtr.Length, held = 0;
+        for (int h = 0; h < n; h++)
+        {
+            if (double.IsNaN(heldAt[h])) continue;
+            double dh = heldAt[h] - x[h];
+            for (int f = 0; f < n; f++)
+                if (double.IsNaN(heldAt[f])) jtr[f] -= jtj[f, h] * dh;
+        }
+        for (int h = 0; h < n; h++)
+        {
+            if (double.IsNaN(heldAt[h])) continue;
+            held++;
+            for (int k = 0; k < n; k++) { jtj[h, k] = 0.0; jtj[k, h] = 0.0; }
+            jtj[h, h] = 1.0;
+            jtr[h] = 0.0;
+        }
+        return held;
+    }
+
+    /// <summary>
+    /// Finishes an active-set step after the solve: each held variable's step is set onto its
+    /// limit, and any other bounded step that would cross a limit is shortened to stop on it
+    /// (folding it back inside instead is what kept a pinned variable creeping: the next step
+    /// pushed out again and folded again). Returns the limit each such variable lands on (NaN for
+    /// the rest), or null when none: pass it to <see cref="SetExactlyOnBounds"/> once the trial
+    /// point is formed, because x + (b - x) is not b in floating point, and a coordinate one ulp
+    /// past the limit folds back as one ulp inside it.
+    /// </summary>
+    internal static double[]? ApplyActiveSetStep(VariableSet variables, double[] x, double[] delta, double[]? heldAt)
+    {
+        double[]? onBound = null;
+        void Land(int i, double b)
+        {
+            if (onBound == null)
+            {
+                onBound = new double[delta.Length];
+                Array.Fill(onBound, double.NaN);
+            }
+            onBound[i] = b;
+            delta[i] = b - x[i];
+        }
+        if (heldAt != null)
+            for (int h = 0; h < delta.Length; h++)
+                if (!double.IsNaN(heldAt[h])) Land(h, heldAt[h]);
+        for (int i = 0; i < variables.Count; i++)
+        {
+            if (onBound != null && !double.IsNaN(onBound[i])) continue;
+            var v = variables[i];
+            if (!v.IsBounded) continue;
+            if (x[i] < v.Min || x[i] > v.Max) continue;
+            double xt = x[i] + delta[i];
+            if (xt < v.Min) Land(i, v.Min);
+            else if (xt > v.Max) Land(i, v.Max);
+        }
+        return onBound;
+    }
+
+    /// <summary>Puts each variable <see cref="ApplyActiveSetStep"/> landed on a limit exactly on it in the trial point.</summary>
+    internal static void SetExactlyOnBounds(double[] trial, double[]? onBound)
+    {
+        if (onBound == null) return;
+        for (int i = 0; i < trial.Length; i++)
+            if (!double.IsNaN(onBound[i])) trial[i] = onBound[i];
     }
 }
