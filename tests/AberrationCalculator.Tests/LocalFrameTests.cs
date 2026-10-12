@@ -33,7 +33,7 @@ public class LocalFrameTests
     [InlineData(0.01, 0.007, -0.04, 0.06)]
     public void GoingInAndComingOutIsTheIdentity(double tx, double ty, double dcx, double dcy)
     {
-        var s = new Surface { TiltX = tx, TiltY = ty, DecenterX = dcx, DecenterY = dcy };
+        var s = new Surface { TiltX = tx, TiltY = ty, DecenterX = dcx, DecenterY = dcy, DecenterZ = 0.3 * dcx - 0.02 };
 
         double x = 1.3, y = -0.7, z = 0.25;
         double dx = 0.1, dy = -0.2, dz = 0.9741;
@@ -73,6 +73,78 @@ public class LocalFrameTests
     {
         Assert.False(LocalFrame.IsPerturbed(new Surface()));
         Assert.True(LocalFrame.IsPerturbed(new Surface { TiltX = 1e-9 }));
+        Assert.True(LocalFrame.IsPerturbed(new Surface { DecenterZ = 1e-9 }));
+    }
+
+    /// <summary>
+    /// <b>An axial decentre is the surface moved along the axis</b>, and nothing else moved: the
+    /// same as lengthening the gap before it and shortening the gap after it by the same amount.
+    /// </summary>
+    [Fact]
+    public void AnAxialDecentreIsTheSurfaceMovedBetweenItsNeighbours()
+    {
+        const double dz = 0.37;
+        var catalog = CatalogLocator.LoadBundled();
+        string path = Fixtures.Lens("CookeTriplet");
+
+        var decentred = LensFile.Read(path, catalog);
+        decentred.Surfaces[3].DecenterZ = dz;
+        var spaced = LensFile.Read(path, catalog);
+        spaced.Surfaces[2].Thickness += dz;
+        spaced.Surfaces[3].Thickness -= dz;
+
+        var n = IndexResolver.Build(decentred, catalog, 0.55, new List<string>());
+        var p = ParaxialTrace.Trace(decentred, n, 0.0);
+        double radius = 0.5 * p.Epd;
+        foreach (double py in new[] { 0.0, 0.6, -0.9 })
+        foreach (double px in new[] { 0.0, 0.5 })
+        foreach (double slope in new[] { 0.0, 0.08 })
+        {
+            var a = RealRayTrace.TraceFrom(decentred, n, p, px * radius, py * radius, 0.0, slope, 1.0);
+            var b = RealRayTrace.TraceFrom(spaced, n, p, px * radius, py * radius, 0.0, slope, 1.0);
+            Assert.True(a.Ok && b.Ok);
+            Assert.Equal(b.Y, a.Y, 11);
+            Assert.Equal(b.Z, a.Z, 11);
+        }
+    }
+
+    /// <summary>
+    /// <b>A sphere turned about its own centre of curvature is the same sphere</b>, so every ray
+    /// meets it exactly where it met the untouched one. Turned by θ about x through its centre at
+    /// <c>z = R</c>, the vertex moves to <c>(0, −R sin θ, R(1 − cos θ))</c> and the surface tilts
+    /// by θ: the tilt, the lateral decentre and the axial decentre have to agree in sign and order
+    /// for the three to cancel, so this checks all three against one another with no oracle.
+    /// </summary>
+    [Theory]
+    [InlineData(2, 0.02)]
+    [InlineData(3, -0.035)]
+    [InlineData(6, 0.05)]
+    public void ASphereTurnedAboutItsCentreOfCurvatureIsUnchanged(int surface, double theta)
+    {
+        var catalog = CatalogLocator.LoadBundled();
+        string path = Fixtures.Lens("CookeTriplet");
+
+        var nominal = LensFile.Read(path, catalog);
+        var turned = LensFile.Read(path, catalog);
+        var s = turned.Surfaces[surface];
+        double r = s.Radius;
+        Assert.True(double.IsFinite(r) && s.Conic == 0.0, "the case needs a sphere");
+        s.TiltX = theta;
+        s.DecenterY = -r * Math.Sin(theta);
+        s.DecenterZ = r * (1.0 - Math.Cos(theta));
+
+        var n = IndexResolver.Build(nominal, catalog, 0.55, new List<string>());
+        var p = ParaxialTrace.Trace(nominal, n, 0.0);
+        double radius = 0.5 * p.Epd;
+        foreach (double py in new[] { 0.0, 0.7, -0.7 })
+        foreach (double px in new[] { 0.0, -0.6 })
+        {
+            var a = RealRayTrace.TraceFrom(nominal, n, p, px * radius, py * radius, 0.0, 0.05, 1.0);
+            var b = RealRayTrace.TraceFrom(turned, n, p, px * radius, py * radius, 0.0, 0.05, 1.0);
+            Assert.True(a.Ok && b.Ok);
+            Assert.Equal(a.Y, b.Y, 10);
+            Assert.Equal(a.Z, b.Z, 10);
+        }
     }
 
     /// <summary>

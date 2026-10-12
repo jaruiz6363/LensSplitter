@@ -109,4 +109,38 @@ public class RealRayTraceTests
         Assert.True(small.Ok);
         _ = small;
     }
+
+    /// <summary>
+    /// A ray steep enough to cross a deep concave surface's vertex plane OUTSIDE the sphere - 11 mm
+    /// off the axis of a surface of radius 10 - still meets the surface further on, as a wide-angle
+    /// lens's edge-field ray meets its front meniscus. Solving y² + (z − 10)² = 100 along the ray
+    /// (0, −11, 0) + t(0, sin 60°, cos 60°) on the near branch: t² − (22 sin 60° + 20 cos 60°)t + 121 = 0.
+    /// </summary>
+    [Fact]
+    public void ARayThatCrossesTheVertexPlaneOutsideADeepSurfaceStillMeetsIt()
+    {
+        var sys = new AberrationCalculator.Core.Models.OpticalSystem
+        {
+            Aperture = new AberrationCalculator.Core.Models.Aperture(AberrationCalculator.Core.Enums.ApertureType.EPD, 4.0),
+            Surfaces = new List<AberrationCalculator.Core.Models.Surface>
+            {
+                new() { Thickness = double.PositiveInfinity },
+                new() { Curvature = 0.1, Thickness = 5.0, IsStop = true },
+                new() { Thickness = 0.0 },
+            },
+            Fields = new List<AberrationCalculator.Core.Models.Field> { new(0.0) },
+            Wavelengths = new List<AberrationCalculator.Core.Models.Wavelength> { new(0.55, 1.0, true) },
+        };
+        var n = new[] { 1.0, 1.5, 1.5 };
+        var p = ParaxialTrace.Trace(sys, n, 0.0);
+        double s = Math.Sin(Math.PI / 3), c = Math.Cos(Math.PI / 3);
+        double b = 22.0 * s + 20.0 * c;
+        double t = (b - Math.Sqrt(b * b - 4.0 * 121.0)) / 2.0;
+
+        var hits = RealRayTrace.TraceRecordFrom(sys, n, p, 0.0, -11.0, 0.0, s, c, atParaxialFocus: false);
+
+        Assert.True(hits[1].Ok);
+        Assert.Equal(-11.0 + t * s, hits[1].Y, 10);
+        Assert.Equal(100.0, hits[1].Y * hits[1].Y + Math.Pow(t * c - 10.0, 2), 9);
+    }
 }

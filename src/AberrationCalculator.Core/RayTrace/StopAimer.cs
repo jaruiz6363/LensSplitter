@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Concurrent;
+using System.Collections.Generic;
 using System.Linq;
 using AberrationCalculator.Core.Models;
 
@@ -165,12 +166,43 @@ public sealed class StopAimer
         return (aim.Y0 + aim.Iyy * ty + aim.Iyx * tx, aim.X0 + aim.Ixy * ty + aim.Ixx * tx);
     }
 
-    /// <summary>The chief ray's launch point at one field, and the Jacobian there; null if no ray reaches the stop's centre.</summary>
+    /// <summary>
+    /// The chief ray's launch point at one field, and the Jacobian there; null if no ray reaches
+    /// the stop's centre.
+    ///
+    /// <para>The search starts at the centre of the paraxial pupil, which is close for most lenses.
+    /// At a wide angle in a retrofocus lens - a fisheye, a wide-angle camera lens - the real
+    /// entrance pupil has moved far forward and the chief ray starts many paraxial pupil radii out
+    /// (nearly 60 at 80 degrees in a 160-degree fisheye), while the ray from the paraxial pupil's
+    /// centre misses the front elements, leaving nowhere to start. Only then are launch points
+    /// along the meridian scanned for rays that reach the stop, out to 40 radii in quarters and
+    /// then further in coarser steps, and the search for the centre started again from those
+    /// crossing nearest it. A field whose chief ray the first search finds is aimed exactly as
+    /// before, and a field whose stop centre no ray reaches is still one that cannot be aimed.</para>
+    /// </summary>
     private Aim? AimAt(double field)
     {
-        var start = Jacobian(field, 0.0, 0.0);
+        var direct = AimFrom(field, 0.0, 0.0);
+        if (direct != null || field == 0.0) return direct;
+
+        var reached = new List<(double Ly, double Sy)>();
+        foreach (var (reach, step) in new[] { (40.0, 0.25), (160.0, 1.0), (640.0, 4.0) })
+        {
+            for (double ly = -reach; ly <= reach; ly += step)
+                if (_crossing(field, ly, 0.0) is (double sy, double _)) reached.Add((ly, sy));
+            if (reached.Count > 0) break;
+        }
+        foreach (var (ly, _) in reached.OrderBy(r => Math.Abs(r.Sy)).Take(8))
+            if (AimFrom(field, ly, 0.0) is { } aim) return aim;
+        return null;
+    }
+
+    /// <summary>The chief ray searched for from (<paramref name="ly"/>, <paramref name="lx"/>), and the Jacobian at it.</summary>
+    private Aim? AimFrom(double field, double ly, double lx)
+    {
+        var start = Jacobian(field, ly, lx);
         if (start == null) return null;
-        var chief = Solve(field, 0.0, 0.0, 0.0, 0.0, start);
+        var chief = Solve(field, 0.0, 0.0, ly, lx, start);
         if (chief is not (double y0, double x0)) return null;
         var j = Jacobian(field, y0, x0);
         return j == null ? null : j with { Y0 = y0, X0 = x0 };
