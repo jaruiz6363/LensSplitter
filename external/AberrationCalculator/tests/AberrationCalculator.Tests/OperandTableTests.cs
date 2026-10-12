@@ -39,6 +39,15 @@ public class OperandTableTests
         return null;
     }
 
+    /// <summary>
+    /// docs/optimizer.md with LF line endings. Git for Windows checks text out with CRLF unless
+    /// told otherwise (core.autocrlf, as GitHub's Windows runner has it), and the table ends at a
+    /// blank line, "\n\n", which a CRLF file never contains: the table ran to the end of the
+    /// file and took in every other table's third column.
+    /// </summary>
+    private static string ReadOptimizerDoc(string root) =>
+        File.ReadAllText(Path.Combine(root, "docs", "optimizer.md")).Replace("\r\n", "\n");
+
     /// <summary>The table's third column, as a set, with the doc's "none" read as "no inputs".</summary>
     private static HashSet<string> SignaturesInTheTable(string doc)
     {
@@ -72,7 +81,7 @@ public class OperandTableTests
         string? root = RepoRoot();
         if (root == null) return;
 
-        string doc = File.ReadAllText(Path.Combine(root, "docs", "optimizer.md"));
+        string doc = ReadOptimizerDoc(root);
         var inTable = SignaturesInTheTable(doc);
 
         var real = new HashSet<string>(
@@ -97,7 +106,7 @@ public class OperandTableTests
         string? root = RepoRoot();
         if (root == null) return;
 
-        string doc = File.ReadAllText(Path.Combine(root, "docs", "optimizer.md"));
+        string doc = ReadOptimizerDoc(root);
         var row = doc.Split('\n')
                      .FirstOrDefault(l => l.StartsWith("| a coefficient name |", StringComparison.Ordinal));
 
