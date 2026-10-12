@@ -37,12 +37,21 @@ public class GlassCatalog
     public void LoadFolder(string folder)
     {
         if (!Directory.Exists(folder)) return;
+        foreach (var file in AgfFiles(folder)) LoadFile(file);
+    }
 
-        // Enumerate and filter by extension rather than globbing "*.agf": Linux filesystems
-        // are case-sensitive and vendor files ship as .AGF as often as .agf.
+    /// <summary>
+    /// The .agf files in <paramref name="folder"/>, however their extension is cased. A glob of
+    /// "*.agf" matches .AGF only where the file system ignores case: on Linux it finds none of
+    /// the catalogs that ship, and every glass would read as missing.
+    /// </summary>
+    public static List<string> AgfFiles(string folder)
+    {
+        var files = new List<string>();
         foreach (var file in Directory.GetFiles(folder))
             if (Path.GetExtension(file).Equals(".agf", StringComparison.OrdinalIgnoreCase))
-                LoadFile(file);
+                files.Add(file);
+        return files;
     }
 
     /// <summary>Loads one .agf file. The catalog name is the file name without extension.</summary>

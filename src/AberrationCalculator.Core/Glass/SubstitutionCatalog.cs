@@ -50,7 +50,7 @@ public static class SubstitutionCatalog
         if (dir == null) return Array.Empty<string>();
 
         var names = new List<string>();
-        foreach (string path in Directory.GetFiles(dir, "*.agf"))
+        foreach (string path in GlassCatalog.AgfFiles(dir))
             names.Add(Path.GetFileNameWithoutExtension(path));
         names.Sort(StringComparer.OrdinalIgnoreCase);
         return names;
@@ -74,7 +74,15 @@ public static class SubstitutionCatalog
                 "no substitution catalogues were found. They ship in catalogs/" + FolderName
               + "; set " + OverrideVariable + " if they live somewhere else.");
 
-        string path = Path.Combine(dir, Path.GetFileNameWithoutExtension(name) + ".AGF");
+        // By name, ignoring case, as on Windows: CoreSet28 is CORESET28.AGF or coreset28.agf.
+        string bare = Path.GetFileNameWithoutExtension(name);
+        string path = Path.Combine(dir, bare + ".AGF");
+        foreach (string file in GlassCatalog.AgfFiles(dir))
+            if (Path.GetFileNameWithoutExtension(file).Equals(bare, StringComparison.OrdinalIgnoreCase))
+            {
+                path = file;
+                break;
+            }
         if (!File.Exists(path))
         {
             var available = Available();
@@ -95,7 +103,7 @@ public static class SubstitutionCatalog
     {
         try
         {
-            return Directory.Exists(folder) && Directory.GetFiles(folder, "*.agf").Length > 0;
+            return Directory.Exists(folder) && GlassCatalog.AgfFiles(folder).Count > 0;
         }
         catch (Exception)
         {

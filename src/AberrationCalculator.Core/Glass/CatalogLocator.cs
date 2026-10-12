@@ -72,7 +72,7 @@ public static class CatalogLocator
     {
         try
         {
-            return Directory.Exists(dir) && Directory.GetFiles(dir, "*.agf").Length > 0;
+            return Directory.Exists(dir) && GlassCatalog.AgfFiles(dir).Count > 0;
         }
         catch
         {

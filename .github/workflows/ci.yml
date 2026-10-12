@@ -1,0 +1,23 @@
+name: CI
+
+# On Linux as well as Windows: the programs built on AberrationCalculator run on both, and a
+# case-sensitive file system is where a Windows-only habit (a "*.agf" glob for .AGF files)
+# shows up.
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+      - run: dotnet test tests/AberrationCalculator.Tests -c Release
