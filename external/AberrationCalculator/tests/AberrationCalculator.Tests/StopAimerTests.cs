@@ -123,4 +123,46 @@ public class StopAimerTests
         foreach (var s in system.Surfaces) s.IsStop = false;
         Assert.Throws<ArgumentException>(() => StopAimer.ForSystem(system, n, p));
     }
+
+    /// <summary>
+    /// A stand-in for a wide-angle lens at its edge field: a ray reaches the stop only when launched
+    /// between <paramref name="from"/> and 9 paraxial pupil radii up - the rest strike the front
+    /// elements - and crosses it 10 mm higher for each radius above 6. The stop is 12.5 mm.
+    /// </summary>
+    private static StopAimer Retrofocus(double from) => new((field, py, pz) =>
+        py >= from && py <= 9.0 && Math.Abs(pz) <= 2.0 ? (10.0 * (py - 6.0), 10.0 * pz) : null, 12.5);
+
+    [Fact]
+    public void AFieldWhoseChiefRayStartsFarOutsideTheParaxialPupilIsStillAimed()
+    {
+        // The stop's centre is reached from 6 radii up; nothing passes at the paraxial pupil's centre.
+        var aimer = Retrofocus(3.0);
+        Assert.True(aimer.CanAim(70.0));
+        Assert.Equal(6.0, aimer.Launch(70.0, 0.0, 0.0)!.Value.Py, 9);
+        Assert.Equal(7.0, aimer.Launch(70.0, 0.8, 0.0)!.Value.Py, 9);
+    }
+
+    /// <summary>
+    /// The contract callers rely on: a field is aimable only if a ray reaches the stop's CENTRE, and
+    /// then Predict is first order about the chief ray. GhostAnalysis launches paraxially where
+    /// CanAim is false and takes foci from rays Predict puts a whisker from the chief ray; a
+    /// field aimed from some other ray broke its focus crossings (2026-10-12).
+    /// </summary>
+    [Fact]
+    public void AFieldWhoseStopCentreNoRayReachesCannotBeAimed()
+    {
+        // Rays start passing at 6.5 radii, which cross the stop 5 mm up: its centre is vignetted.
+        var aimer = Retrofocus(6.5);
+        Assert.False(aimer.CanAim(80.0));
+        Assert.Null(aimer.Launch(80.0, 0.8, 0.0));
+        Assert.Null(aimer.Predict(80.0, 0.0, 0.0));
+    }
+
+    [Fact]
+    public void AFieldNoRayOfWhichReachesTheStopCannotBeAimed()
+    {
+        var aimer = new StopAimer((field, py, pz) => null, 12.5);
+        Assert.False(aimer.CanAim(80.0));
+        Assert.Null(aimer.Launch(80.0, 0.5, 0.0));
+    }
 }
