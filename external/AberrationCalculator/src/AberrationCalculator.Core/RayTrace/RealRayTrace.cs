@@ -378,14 +378,53 @@ public static class RealRayTrace
     /// The starting guess is the flat-surface crossing, which is exact for a plane and close
     /// for anything this program handles. <paramref name="travelled"/> is how far the ray moved
     /// along its direction to get there, negative if it went back.
+    ///
+    /// <para>A steep ray into a deep concave surface - a wide-angle retrofocus lens's front
+    /// meniscus at its edge field - crosses the vertex plane outside the surface altogether, where
+    /// there is no sag to iterate on, though it meets the surface further on. Only then is the
+    /// search started again from the surface's conic, intersected in closed form: every ray the
+    /// flat-surface start finds is found exactly as before.</para>
     /// </summary>
     private static bool Intersect(Surface s, ref Scalar x, ref Scalar y, ref Scalar z,
                                   Scalar dx, Scalar dy, Scalar dz, out Scalar travelled)
     {
         travelled = 0.0;
         if (SMath.Abs(dz) < 1e-14) return false;
+        Scalar flat = -z / dz;
+        if (Newton(s, ref x, ref y, ref z, dx, dy, dz, flat, out travelled)) return true;
+        foreach (Scalar start in ConicCrossings(s, x, y, z, dx, dy, dz, flat))
+            if (Newton(s, ref x, ref y, ref z, dx, dy, dz, start, out travelled)) return true;
+        return false;
+    }
 
-        Scalar t = -z / dz;
+    /// <summary>
+    /// Where the ray meets the surface's conic - c(x² + y²) − 2z + c(1 + k)z² = 0 along the ray, a
+    /// quadratic in t - on the branch the sag describes, (1 + k)cz ≤ 1, nearest the flat start first.
+    /// </summary>
+    private static System.Collections.Generic.List<Scalar> ConicCrossings(Surface s, Scalar x, Scalar y, Scalar z,
+                                                                          Scalar dx, Scalar dy, Scalar dz, Scalar flat)
+    {
+        var roots = new System.Collections.Generic.List<Scalar>();
+        Scalar c = s.Curvature, k1 = 1.0 + s.Conic;
+        if (SMath.Vanishes(c, 1e-15)) return roots;
+        Scalar a = c * (dx * dx + dy * dy + k1 * dz * dz);
+        Scalar b = 2.0 * (c * (x * dx + y * dy + k1 * z * dz) - dz);
+        Scalar q = c * (x * x + y * y + k1 * z * z) - 2.0 * z;
+        Scalar disc = b * b - 4.0 * a * q;
+        if (disc < 0.0) return roots;
+        Scalar root = SMath.Sqrt(disc);
+        if (SMath.Abs(a) < 1e-300) roots.Add(-q / b);
+        else { roots.Add((-b - root) / (2.0 * a)); roots.Add((-b + root) / (2.0 * a)); }
+        roots.RemoveAll(t => k1 * c * (z + t * dz) > 1.0 + 1e-12);
+        roots.Sort((p, r) => SMath.Abs(p - flat).CompareTo(SMath.Abs(r - flat)));
+        return roots;
+    }
+
+    /// <summary>Newton's method on the sag from <paramref name="t"/> along the ray; false if it leaves the surface or does not converge.</summary>
+    private static bool Newton(Surface s, ref Scalar x, ref Scalar y, ref Scalar z,
+                               Scalar dx, Scalar dy, Scalar dz, Scalar t, out Scalar travelled)
+    {
+        travelled = 0.0;
         for (int k = 0; k < 64; k++)
         {
             Scalar xi = x + t * dx, yi = y + t * dy, zi = z + t * dz;

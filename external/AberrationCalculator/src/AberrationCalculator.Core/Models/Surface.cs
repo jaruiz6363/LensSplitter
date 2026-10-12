@@ -56,8 +56,9 @@ public class Surface
     // ── Perturbation ─────────────────────────────────────────────────────────────────
     // How this surface sits relative to the mechanical axis. Zero for every surface of an
     // aligned design, which is what a lens file normally describes, so nothing downstream
-    // changes unless something sets these. Nodal aberration theory is the only consumer:
-    // the paraxial trace is a rotationally symmetric construction and does not read them.
+    // changes unless something sets these. The real ray trace traces the surface in its own
+    // frame (LocalFrame), and nodal aberration theory reads the decentres and tilts; the
+    // paraxial trace is a rotationally symmetric construction and does not read them.
 
     /// <summary>Decentre along x, in lens units.</summary>
     public Scalar DecenterX { get; set; }
@@ -66,13 +67,26 @@ public class Surface
     public Scalar DecenterY { get; set; }
 
     /// <summary>
+    /// Displacement of the vertex along the axis, in lens units, applied with the other two
+    /// decentres before the tilt. Nothing beyond this surface moves - the next surface is still
+    /// <see cref="Thickness"/> from this one's nominal vertex - which is what an element tilted
+    /// about a pivot needs: each of its vertices swings off the axis and along it.
+    /// </summary>
+    public Scalar DecenterZ { get; set; }
+
+    /// <summary>
     /// Tilt about the x axis, in RADIANS. A tilt about x swings the surface in the y-z
     /// meridian, so it pairs with <see cref="DecenterY"/> - see the note on
     /// <see cref="IsPerturbed"/>.
+    ///
+    /// <para><b>The opposite sign to OpticStudio's.</b> A surface with TiltX = θ traces as
+    /// OpticStudio traces it between coordinate breaks tilting about x by −θ (checked ray by ray
+    /// on 2026-10-12). The y tilt and both decentres agree in sign. The frame also turns about y
+    /// before x, which is OpticStudio's coordinate-break order 1, not its order 0.</para>
     /// </summary>
     public Scalar TiltX { get; set; }
 
-    /// <summary>Tilt about the y axis, in RADIANS.</summary>
+    /// <summary>Tilt about the y axis, in RADIANS. The same sign as OpticStudio's.</summary>
     public Scalar TiltY { get; set; }
 
     /// <summary>
@@ -116,7 +130,7 @@ public class Surface
     /// breaks that equivalence and because a tolerance budget quotes them separately.</para>
     /// </summary>
     public bool IsPerturbed =>
-        DecenterX != 0.0 || DecenterY != 0.0 || TiltX != 0.0 || TiltY != 0.0;
+        DecenterX != 0.0 || DecenterY != 0.0 || DecenterZ != 0.0 || TiltX != 0.0 || TiltY != 0.0;
 
     public bool IsMirror => !string.IsNullOrEmpty(Material)
                             && Material!.Equals("MIRROR", StringComparison.OrdinalIgnoreCase);

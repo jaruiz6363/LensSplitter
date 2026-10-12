@@ -87,7 +87,7 @@ public static class LocalFrame
     {
         var r = Rotation(s.TiltX, s.TiltY);
 
-        Scalar px = x - s.DecenterX, py = y - s.DecenterY, pz = z;
+        Scalar px = x - s.DecenterX, py = y - s.DecenterY, pz = z - s.DecenterZ;
         x = r.M0 * px + r.M1 * py + r.M2 * pz;
         y = r.M3 * px + r.M4 * py + r.M5 * pz;
         z = r.M6 * px + r.M7 * py + r.M8 * pz;
@@ -111,7 +111,7 @@ public static class LocalFrame
         Scalar px = x, py = y, pz = z;
         x = r.M0 * px + r.M3 * py + r.M6 * pz + s.DecenterX;
         y = r.M1 * px + r.M4 * py + r.M7 * pz + s.DecenterY;
-        z = r.M2 * px + r.M5 * py + r.M8 * pz;
+        z = r.M2 * px + r.M5 * py + r.M8 * pz + s.DecenterZ;
 
         Scalar ux = dx, uy = dy, uz = dz;
         dx = r.M0 * ux + r.M3 * uy + r.M6 * uz;
