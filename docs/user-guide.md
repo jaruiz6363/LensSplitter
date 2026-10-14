@@ -178,6 +178,8 @@ A perturbation for `--nat` is kept beside the lens, never in it, and is built a 
 
 Delete `lens.zmx.align` to restore the nominal design.
 
+A Zernike departure set on a surface in code - `Surface.FringeZernike`, with `Surface.ZernikeRadius` for the radius of its unit circle, the semi-diameter if it is not set - is traced by the real ray trace as well, as a sag added to the surface (see [verification.md](verification.md), *A Zernike departure in the real trace*).
+
 ## 7. Optimising
 
 `--optimize` changes the design to reduce a **merit function**, and writes the result back into
