@@ -101,10 +101,26 @@ public class Surface
     ///
     /// <para>Indexed by term number rather than named, because nodal aberration theory extends
     /// upwards through the same list: Z10/11 trefoil, Z12/13 oblique spherical, Z14/15 secondary
-    /// coma, Z17/18 tetrafoil. Only 5 to 8 are acted on today; the rest are carried and ignored
-    /// rather than refused, so a file that states them survives a round trip.</para>
+    /// coma, Z17/18 tetrafoil. Nodal aberration theory reads the pairs it has a theory for; the
+    /// rest are carried rather than refused there, so a file that states them survives a round
+    /// trip.</para>
+    ///
+    /// <para><b>The real ray trace traces the departure in full</b>, Z1 to Z37, as a sag added to
+    /// the conic and polynomial: Z_j(x/a, y/a) with a = <see cref="ZernikeRadius"/>, the angle
+    /// counter-clockwise from x as the testing frame has it (<see cref="ZernikeSag"/>). The paraxial
+    /// trace does not read it. A term with a constant part (Z1, Z4, Z9 ...) moves the vertex along
+    /// the axis, and one with a ρ² part (Z4, Z9 ...) changes the vertex curvature; the paraxial
+    /// trace sees neither. Z5 and Z6, astigmatism, have neither part, and Z9 less Z1 has no
+    /// constant part.</para>
     /// </summary>
     public Scalar[] FringeZernike { get; set; } = Array.Empty<Scalar>();
+
+    /// <summary>
+    /// The radius of <see cref="FringeZernike"/>'s unit circle, in lens units: ρ = r / a. Zero, the
+    /// default, means the semi-diameter. A figure error specified over a clear aperture is stated
+    /// at that aperture's radius, which the semi-diameter of an automatic aperture need not be.
+    /// </summary>
+    public Scalar ZernikeRadius { get; set; }
 
     /// <summary>The Fringe Zernike coefficient of that term, or zero if none is stated.</summary>
     public Scalar Zernike(int term) =>
@@ -119,6 +135,107 @@ public class Surface
             foreach (var z in FringeZernike) if (z != 0.0) return true;
             return false;
         }
+    }
+
+    /// <summary>The highest Fringe term <see cref="ZernikeSag"/> traces: Z37, the 12th-order spherical.</summary>
+    public const int MaxTracedZernike = 37;
+
+    /// <summary>
+    /// The Zernike departure's sag at (x, y) in the surface's own frame, and its slopes dz/dx and
+    /// dz/dy, all in lens units: Σ FringeZernike[j] Z_j(x/a, y/a), a = <see cref="ZernikeRadius"/>
+    /// or else the semi-diameter. Zero, with zero slopes, when no term is stated; NaN when terms
+    /// are stated but there is no radius to scale them by, or a term above
+    /// <see cref="MaxTracedZernike"/> is, so the ray fails rather than missing the departure.
+    ///
+    /// <para>Each Fringe term is R_n^m(ρ) cos mθ or sin mθ. It is evaluated as P(ρ²) times the real
+    /// or imaginary part of (u + iv)^m, P = R_n^m / ρ^m being a polynomial in ρ², so the slopes have
+    /// no singularity at the vertex. The terms run by s = (n + m)/2: within each, m falls from s to
+    /// 0, cosine before sine, n = 2s − m; Z37 is the (12, 0) term alone.</para>
+    /// </summary>
+    public Scalar ZernikeSag(Scalar x, Scalar y, out Scalar dzdx, out Scalar dzdy)
+    {
+        dzdx = 0.0;
+        dzdy = 0.0;
+        if (!HasZernike) return 0.0;
+        Scalar a = ZernikeRadius > 0.0 ? ZernikeRadius : SemiDiameter;
+        if (!(a > 0.0) || FringeZernike.Length > MaxTracedZernike + 1 && HasZernikeAbove(MaxTracedZernike))
+        {
+            dzdx = Scalar.NaN;
+            dzdy = Scalar.NaN;
+            return Scalar.NaN;
+        }
+
+        Scalar u = x / a, v = y / a, rho2 = u * u + v * v;
+        Scalar sag = 0.0, du = 0.0, dv = 0.0;
+        int j = 1;
+        for (int s = 0; s <= 6 && j < FringeZernike.Length; s++)
+        {
+            for (int m = s; m >= 0 && j < FringeZernike.Length; m--)
+            {
+                int n = 2 * s - m;
+                if (s == 6 && m > 0) continue;                 // the 37th term is (12, 0) alone
+
+                // P(ρ²) = R_n^m(ρ) / ρ^m and its derivative in ρ².
+                Scalar p = 0.0, dp = 0.0;
+                int half = (n - m) / 2;
+                for (int k = 0; k <= half; k++)
+                {
+                    double c = (k % 2 == 0 ? 1.0 : -1.0) * Factorial(n - k)
+                               / (Factorial(k) * Factorial((n + m) / 2 - k) * Factorial(half - k));
+                    int power = half - k;                      // of ρ²
+                    Scalar t = 1.0;
+                    for (int q = 0; q < power; q++) t *= rho2;
+                    p += c * t;
+                    if (power > 0)
+                    {
+                        Scalar t1 = 1.0;
+                        for (int q = 0; q < power - 1; q++) t1 *= rho2;
+                        dp += c * power * t1;
+                    }
+                }
+
+                // (u + iv)^m and (u + iv)^(m - 1).
+                Scalar re = 1.0, im = 0.0, reLow = 0.0, imLow = 0.0;
+                for (int q = 0; q < m; q++)
+                {
+                    reLow = re;
+                    imLow = im;
+                    Scalar next = re * u - im * v;
+                    im = re * v + im * u;
+                    re = next;
+                }
+
+                for (int part = 0; part < (m == 0 ? 1 : 2) && j < FringeZernike.Length; part++, j++)
+                {
+                    Scalar coefficient = FringeZernike[j];
+                    if (coefficient == 0.0) continue;
+                    // cos mθ: Re(z^m), whose u and v derivatives are m Re(z^(m-1)) and -m Im(z^(m-1));
+                    // sin mθ: Im(z^m), with m Im(z^(m-1)) and m Re(z^(m-1)).
+                    Scalar angular = part == 0 ? re : im;
+                    Scalar dAu = part == 0 ? m * reLow : m * imLow;
+                    Scalar dAv = part == 0 ? -m * imLow : m * reLow;
+                    sag += coefficient * p * angular;
+                    du += coefficient * (2.0 * u * dp * angular + p * dAu);
+                    dv += coefficient * (2.0 * v * dp * angular + p * dAv);
+                }
+            }
+        }
+        dzdx = du / a;
+        dzdy = dv / a;
+        return sag;
+    }
+
+    private bool HasZernikeAbove(int term)
+    {
+        for (int j = term + 1; j < FringeZernike.Length; j++) if (FringeZernike[j] != 0.0) return true;
+        return false;
+    }
+
+    private static double Factorial(int n)
+    {
+        double f = 1.0;
+        for (int i = 2; i <= n; i++) f *= i;
+        return f;
     }
 
     /// <summary>

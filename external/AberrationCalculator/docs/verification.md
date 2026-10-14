@@ -93,6 +93,7 @@ now asserts it.
 | fifth order from Optiland's rays | all twelve on 45 designs at infinity, aspheric and a mirror included, to between 3E-9 and 1.3E-5 of the largest - the inversion's own floor on this program's rays |
 | the seventh order on a mirror | finite since the scheme was given signed indices; all nineteen tau against reflected real rays to 6E-6 of the largest on the parabola at ten degrees; Forbes declines a mirror |
 | the macros on a mirror | BUCH7_ASPH reproduces this program on all thirty-seven, to every printed digit, on the parabola (F4) and the spherical mirror (F10) in OpticStudio; BUCH7 does the same on F10 and declines the figured F4; RAYINV agrees in sign everywhere and to its fit's floor; FORBES declines. One reflection only - see [optiland.md](optiland.md) |
+| a Zernike sag departure in the real trace | Z9 − Z1 traces as its even asphere, and Z5 and Z6 as theirs in each principal meridian, to 1E-10 where the departure moves the rays by more than 1E-4 mm; every one of the 37 terms is 1 or 0 at the rim and its slopes are its derivatives (`ZernikeSagTraceTests`) |
 | the suite | over a thousand tests, and everything they read is in this repository |
 
 ## The aspheric arrangement, and how it was established
@@ -1184,3 +1185,15 @@ telescope. See *Mirrors* above.
 designs measured, one is described by third order alone, two need the full seventh to reach a
 per cent, one is not well described at seventh, and one is not described at all. See
 `spot-prediction.md`.
+
+## A Zernike departure in the real trace
+
+A surface's Fringe Zernike departure (`Surface.FringeZernike`) had been read by nodal aberration theory only; the real ray trace now traces it too, as a sag added to the conic and polynomial, Z1 to Z37, over a unit circle of radius `Surface.ZernikeRadius` (the semi-diameter if that is not set), with the angle counter-clockwise from x. A surface with no departure takes the old code path, so every lens without one traces bit for bit as before.
+
+It is checked exactly, against shapes the trace already handled, in `ZernikeSagTraceTests`:
+
+- Z9 − Z1 is 6ρ⁴ − 6ρ², an even asphere's r² and r⁴ terms. A singlet given it lands every ray, meridional and diagonal, as the same asphere does, to 1E-10, where the departure moves them by more than 1E-4 mm.
+- Z5 = (x² − y²)/a² is +r²/a² along the x meridian and −r²/a² along y, with no slope across either, so a ray in either stays there: sagittal and meridional rays land as the matching asphere's. Z6 does the same along the diagonal x = y.
+- The polynomials themselves: every cosine and rotationally symmetric term is 1 at the rim along x and every sine term 0, as R_n^m(1) = 1 requires, and every slope agrees with a central difference, for all 37 terms.
+
+The paraxial trace does not read the departure. A term with a constant part (Z1, Z4, Z9 ...) moves the vertex, and one with a ρ² part changes its curvature, which the paraxial trace then does not see; Z5 and Z6 have neither, and Z9 − Z1 has no constant part.

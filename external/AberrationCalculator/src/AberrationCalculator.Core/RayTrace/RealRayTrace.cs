@@ -425,19 +425,23 @@ public static class RealRayTrace
                                Scalar dx, Scalar dy, Scalar dz, Scalar t, out Scalar travelled)
     {
         travelled = 0.0;
+        bool figured = s.HasZernike;
         for (int k = 0; k < 64; k++)
         {
             Scalar xi = x + t * dx, yi = y + t * dy, zi = z + t * dz;
             Scalar r = SMath.Sqrt(xi * xi + yi * yi);
             Scalar sag = s.Sag(r);
+            Scalar zx = 0.0, zy = 0.0;
+            if (figured) sag += s.ZernikeSag(xi, yi, out zx, out zy);
             if (Scalar.IsNaN(sag)) return false;
 
             Scalar f = zi - sag;
 
-            // d/dt of (z - sag(r)) = dz - S'(r) * (x dx + y dy) / r
+            // d/dt of (z - sag(r) - Z(x, y)) = dz - S'(r) * (x dx + y dy) / r - Zx dx - Zy dy
             Scalar sp = SagSlope(s, r);
             Scalar drdt = r > 1e-14 ? (xi * dx + yi * dy) / r : 0.0;
             Scalar d = dz - sp * drdt;
+            if (figured) d -= zx * dx + zy * dy;
             if (SMath.Abs(d) < 1e-14) return false;
 
             // Whether the RESIDUAL has converged. The correction below is applied anyway, and
@@ -503,7 +507,8 @@ public static class RealRayTrace
 
     /// <summary>
     /// Snell's law in vector form. The surface normal comes from the implicit form
-    /// F = z - S(r), whose gradient is (-S'(r) x/r, -S'(r) y/r, 1).
+    /// F = z - S(r) - Z(x, y), whose gradient is (-S'(r) x/r - Zx, -S'(r) y/r - Zy, 1), Z being the
+    /// surface's Zernike departure, if any.
     /// </summary>
     private static bool Refract(Surface s, Scalar x, Scalar y, Scalar nBefore, Scalar nAfter,
                                 ref Scalar dx, ref Scalar dy, ref Scalar dz)
@@ -516,6 +521,13 @@ public static class RealRayTrace
 
         Scalar nx = 0.0, ny = 0.0, nz = 1.0;
         if (r > 1e-14) { nx = -sp * x / r; ny = -sp * y / r; }
+        if (s.HasZernike)
+        {
+            s.ZernikeSag(x, y, out Scalar zx, out Scalar zy);
+            if (Scalar.IsNaN(zx)) return false;
+            nx -= zx;
+            ny -= zy;
+        }
         Scalar len = SMath.Sqrt(nx * nx + ny * ny + nz * nz);
         nx /= len; ny /= len; nz /= len;
 
