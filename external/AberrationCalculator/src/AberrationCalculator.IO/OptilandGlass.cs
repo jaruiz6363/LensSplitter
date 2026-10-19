@@ -148,8 +148,11 @@ namespace AberrationCalculator.Core.IO
             return sb.ToString();
         }
 
-        /// <summary>The note written into the folder of glasses beside a lens file.</summary>
-        public static string ReadMe(string lensFile, IEnumerable<string> catalogs)
+        /// <summary>
+        /// The note written into the folder of glasses beside a lens file. <paramref name="installedTo"/> is
+        /// the Optiland catalogs folder the glasses were installed in, or null when they were not installed.
+        /// </summary>
+        public static string ReadMe(string lensFile, IEnumerable<string> catalogs, string? installedTo)
         {
             var sb = new StringBuilder();
             sb.AppendLine($"The glasses of {lensFile}.");
@@ -159,10 +162,20 @@ namespace AberrationCalculator.Core.IO
             sb.AppendLine("one of these catalogs and match_policy \"strict\", so Optiland uses exactly these");
             sb.AppendLine("glasses, and never substitutes another.");
             sb.AppendLine();
-            sb.AppendLine("They were installed for Optiland on the machine the lens was written on, in");
-            sb.AppendLine("~/.optiland/catalogs/ (on Windows, %USERPROFILE%\\.optiland\\catalogs\\); Optiland");
-            sb.AppendLine("loads them when it starts. On another machine, copy the folders here into that");
-            sb.AppendLine("folder. Folders of the same name from other lenses merge: a glass is the same file.");
+            if (installedTo != null)
+            {
+                sb.AppendLine("They were installed for Optiland on the machine the lens was written on, in");
+                sb.AppendLine(installedTo + "; Optiland loads them when it starts. On another machine,");
+                sb.AppendLine("copy the folders here into ~/.optiland/catalogs/ (on Windows,");
+                sb.AppendLine("%USERPROFILE%\\.optiland\\catalogs\\).");
+            }
+            else
+            {
+                sb.AppendLine("They were not installed. For Optiland to load them when it starts, copy the");
+                sb.AppendLine("folders here into ~/.optiland/catalogs/ (on Windows,");
+                sb.AppendLine("%USERPROFILE%\\.optiland\\catalogs\\).");
+            }
+            sb.AppendLine("Folders of the same name from other lenses merge: a glass is the same file.");
             sb.AppendLine();
             sb.AppendLine("Or load them in the session, before loading the lens:");
             sb.AppendLine("    from optiland.materials.registry import MaterialRegistry");
