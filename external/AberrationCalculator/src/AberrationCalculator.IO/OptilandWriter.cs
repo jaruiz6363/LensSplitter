@@ -180,6 +180,10 @@ namespace AberrationCalculator.Core.IO
             File.WriteAllText(filePath, sb.ToString());
             result.GlassFolder = WriteGlassFolder(filePath, ymls);
             if (install && ymls.Count > 0) Install(ymls, result);
+            // The note says whether they were installed, so it is written after the attempt.
+            if (result.GlassFolder != null)
+                File.WriteAllText(Path.Combine(result.GlassFolder, "README.txt"),
+                    OptilandGlass.ReadMe(Path.GetFileName(filePath), ymls.Keys, result.InstalledTo));
             return result;
         }
 
@@ -271,7 +275,6 @@ namespace AberrationCalculator.Core.IO
                 foreach (var g in catalog.Value)
                     File.WriteAllText(Path.Combine(sub, g.Key + ".yml"), g.Value, new UTF8Encoding(false));
             }
-            File.WriteAllText(Path.Combine(folder, "README.txt"), OptilandGlass.ReadMe(Path.GetFileName(filePath), ymls.Keys));
             return folder;
         }
 
