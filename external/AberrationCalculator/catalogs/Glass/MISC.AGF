@@ -7,8 +7,15 @@ CC   no OpticStudio catalog content is redistributed here
 CC   VACUUM is relative to air, so its index is < 1 and not = 1
 CC   the ED line's last field must be 0, or some readers drop the formula
 CC   every entry cites a published source; none is inferred from a glass code
+CC   TD lines hold the TIE-19 constants of the ABSOLUTE index (SCHOTT TIE-19):
+CC     dn_abs = (n^2-1)/(2n) [D0 dT + D1 dT^2 + D2 dT^3
+CC                            + (E0 dT + E1 dT^2)/(L^2 - Ltk^2)]
+CC   so D0 is (2n/(n^2-1)) dn_abs/dT, not dn/dT itself. Each fit's source and
+CC   residual are given with its entry.
 CC
-CC Catalog version: 1.4  (2026-05-17 — added BACD9 for Ross Optical catalog)
+CC Catalog version: 1.5  (2026-10-19 — TD lines refitted to published thermal
+CC                  data; they had held dn/dT in D0)
+CC                  1.4  (2026-05-17 — added BACD9 for Ross Optical catalog)
 CC Maintainer:      Synapse Optics
 CC Purpose:         vendor stock-lens import for Edmund Optics, Thorlabs,
 CC                  Newport and the like, where vendor .zmx files reference
@@ -82,14 +89,20 @@ CC    @ 656.3 nm (C-line): n approx 1.432422
 CC Vd (computed F/d/C) approx 93.6
 CC
 CC Validity (Malitson 1963): 0.23 - 9.7 um.
-CC Density 3.18 g/cm^3; TCE approx 19 ppm/K (0-50 C); dn/dT approx -1.07e-5 /K
-CC at room temperature, visible.
+CC Density 3.18 g/cm^3; TCE approx 19 ppm/K (0-50 C).
+CC
+CC Thermal (TD): TIE-19 constants fitted to the absolute dn/dT measured by
+CC   A. Feldman, D. Horowitz, R.M. Waxler and M.J. Dodge, "Optical materials
+CC   characterization," NBS Technical Note 993 (1979), Table 4c, 0.4579-3.39 um,
+CC   -100 to +140 C; rms 3e-7 /K. dn_abs/dT at 20 C, 633 nm: -1.14e-5 /K. Agrees
+CC   with the CHARMS measurements (D.B. Leviton, B.J. Frey and T.J. Madison, Proc.
+CC   SPIE 6692, 669204, 2007) to 3e-7 /K from -20 to +20 C.
 CC ---------------------------------------------------------------------------
 NM CAF2 2 0 1.43388 93.6 0 0 1
 GC Calcium fluoride, single crystal; Malitson 1963
 ED 1.900000E+001 2.400000E+001 3.180000E+000 0.000000E+000 0 0
 CD 5.6758880E-001 2.5264270E-003 4.7109140E-001 1.0078335E-002 3.8484723E+000 1.2005558E+003
-TD -1.070000E-005 0.000000E+000 0.000000E+000 0.000000E+000 0.000000E+000 0.000000E+000 2.000000E+001
+TD -3.088503E-005 -2.162215E-008 4.804489E-011 0.000000E+000 0.000000E+000 0.000000E+000 2.000000E+001
 LD 2.300000E-001 9.700000E+000
 CC
 CC ---------------------------------------------------------------------------
@@ -121,13 +134,19 @@ CC Vd (computed F/d/C) approx 78
 CC
 CC Validity (Malitson & Dodge 1972): 0.265 - 5.5 um.
 CC Density 3.98 g/cm^3; TCE approx 6.7 ppm/K (parallel c-axis), 5.0 ppm/K
-CC (perpendicular c-axis); dn/dT approx +1.3e-5 /K at room temperature visible.
+CC (perpendicular c-axis).
+CC
+CC Thermal (TD): TIE-19 constants fitted to the absolute dn_o/dT measured by
+CC   A. Feldman, D. Horowitz, R.M. Waxler and M.J. Dodge, "Optical materials
+CC   characterization," NBS Technical Note 993 (1979), Table 4a, ordinary ray at
+CC   0.4579 um, -100 to +140 C; rms 4e-8 /K. One wavelength, so no wavelength
+CC   dependence. dn_o_abs/dT at 20 C: +1.16e-5 /K.
 CC ---------------------------------------------------------------------------
 NM SAPPHIRE 2 0 1.7682 78.0 0 0 1
 GC Sapphire ordinary ray; Malitson and Dodge 1972
 ED 6.700000E+000 6.700000E+000 3.980000E+000 0.000000E+000 0 0
 CD 1.4313493E+000 5.2799270E-003 6.5054713E-001 1.4238265E-002 5.3414021E+000 3.2501783E+002
-TD 1.300000E-005 0.000000E+000 0.000000E+000 0.000000E+000 0.000000E+000 0.000000E+000 2.000000E+001
+TD 1.925473E-005 2.539073E-008 -3.997678E-011 0.000000E+000 0.000000E+000 0.000000E+000 2.000000E+001
 LD 2.650000E-001 5.500000E+000
 CC
 CC ---------------------------------------------------------------------------
@@ -135,12 +154,13 @@ CC AL2O3  (alias for SAPPHIRE, same material)
 CC ---------------------------------------------------------------------------
 CC Identical Sellmeier to SAPPHIRE above. Some vendor .zmx files (e.g. Edmund)
 CC use "AL2O3" as the GLAS name; this entry resolves those without name remapping.
+CC Thermal (TD): as SAPPHIRE.
 CC ---------------------------------------------------------------------------
 NM AL2O3 2 0 1.7682 78.0 0 0 1
 GC Aluminum oxide (sapphire), ordinary ray; alias of SAPPHIRE
 ED 6.700000E+000 6.700000E+000 3.980000E+000 0.000000E+000 0 0
 CD 1.4313493E+000 5.2799270E-003 6.5054713E-001 1.4238265E-002 5.3414021E+000 3.2501783E+002
-TD 1.300000E-005 0.000000E+000 0.000000E+000 0.000000E+000 0.000000E+000 0.000000E+000 2.000000E+001
+TD 1.925473E-005 2.539073E-008 -3.997678E-011 0.000000E+000 0.000000E+000 0.000000E+000 2.000000E+001
 LD 2.650000E-001 5.500000E+000
 CC
 CC ---------------------------------------------------------------------------
@@ -170,14 +190,23 @@ CC second resonance term is absorbed into the single L1 constant). Acceptable
 CC for stock-lens import; for high-precision design, refit with a 3-term
 CC Sellmeier from the original tabulated data.
 CC
-CC Density 1.19 g/cm^3; TCE approx 70 ppm/K (0-50 C); dn/dT approx -1.05e-4
-CC /K at room temperature visible (note: negative and large, typical polymer).
+CC Density 1.19 g/cm^3; TCE approx 70 ppm/K (0-50 C).
+CC
+CC Thermal (TD): D0 and D1 from the d-line dn/dT of S.N. Kasarova, N.G.
+CC   Sultanova and I.D. Nikolov, J. Phys.: Conf. Ser. 253, 012028 (2010), Table
+CC   1: -0.90e-4 /K from 10 to 20 C and -1.30e-4 /K from 20 to 50 C, which give
+CC   -1.00e-4 /K at 20 C (relative to air) and a second derivative of -2e-6 /K^2.
+CC   An interferometric measurement (J.A. Corsetti et al., "Measurement of linear
+CC   coefficient of thermal expansion and temperature-dependent refractive index
+CC   using interferometric system," University of Rochester, NASA NTRS
+CC   20170006479) gives -0.997e-4 /K at 632.8 nm from 5 to 35 C. A polymer's
+CC   dn/dT depends on its grade and history; take it as +-20 %.
 CC ---------------------------------------------------------------------------
 NM PMMA 2 0 1.49061 53.0 0 0 1
 GC Poly(methyl methacrylate); Sultanova Kasarova Nikolov 2009
 ED 7.000000E+001 7.000000E+001 1.190000E+000 0.000000E+000 0 0
 CD 1.1819000E+000 1.1313000E-002 0.0000000E+000 0.0000000E+000 0.0000000E+000 0.0000000E+000
-TD -1.050000E-004 0.000000E+000 0.000000E+000 0.000000E+000 0.000000E+000 0.000000E+000 2.000000E+001
+TD -2.474290E-004 -2.428607E-006 0.000000E+000 0.000000E+000 0.000000E+000 0.000000E+000 2.000000E+001
 LD 4.368000E-001 1.052000E+000
 CC
 CC ---------------------------------------------------------------------------
@@ -185,12 +214,13 @@ CC ACRYLIC  (alias for PMMA, same material)
 CC ---------------------------------------------------------------------------
 CC Identical Sellmeier to PMMA above. "Acrylic" is the trade/vendor name
 CC commonly used in Edmund and Thorlabs .zmx GLAS lines.
+CC Thermal (TD): as PMMA.
 CC ---------------------------------------------------------------------------
 NM ACRYLIC 2 0 1.49061 53.0 0 0 1
 GC Acrylic polymer; alias of PMMA (Sultanova 2009)
 ED 7.000000E+001 7.000000E+001 1.190000E+000 0.000000E+000 0 0
 CD 1.1819000E+000 1.1313000E-002 0.0000000E+000 0.0000000E+000 0.0000000E+000 0.0000000E+000
-TD -1.050000E-004 0.000000E+000 0.000000E+000 0.000000E+000 0.000000E+000 0.000000E+000 2.000000E+001
+TD -2.474290E-004 -2.428607E-006 0.000000E+000 0.000000E+000 0.000000E+000 0.000000E+000 2.000000E+001
 LD 4.368000E-001 1.052000E+000
 CC
 CC ---------------------------------------------------------------------------
@@ -216,13 +246,17 @@ CC
 CC Note: Handbook PC values are often nd=1.585 / Vd=30. As with PMMA, the
 CC single-term fit underpredicts Vd. Acceptable for stock-lens import.
 CC
-CC Density 1.20 g/cm^3; TCE approx 67 ppm/K; dn/dT approx -1.07e-4 /K.
+CC Density 1.20 g/cm^3; TCE approx 67 ppm/K.
+CC
+CC Thermal (TD): D0 from the d-line dn/dT of N. Sultanova, S. Kasarova and
+CC   I. Nikolov, Bulg. J. Phys. 40, 258 (2013), Table 1: -1.00e-4 /K from 20 to
+CC   50 C, relative to air. Take it as +-20 %.
 CC ---------------------------------------------------------------------------
 NM POLYCARB 2 0 1.58472 27.9 0 0 1
 GC Polycarbonate (bisphenol-A); Sultanova Kasarova Nikolov 2009
 ED 6.700000E+001 6.700000E+001 1.200000E+000 0.000000E+000 0 0
 CD 1.4182000E+000 2.1304000E-002 0.0000000E+000 0.0000000E+000 0.0000000E+000 0.0000000E+000
-TD -1.070000E-004 0.000000E+000 0.000000E+000 0.000000E+000 0.000000E+000 0.000000E+000 2.000000E+001
+TD -2.128503E-004 0.000000E+000 0.000000E+000 0.000000E+000 0.000000E+000 0.000000E+000 2.000000E+001
 LD 4.368000E-001 1.052000E+000
 CC
 CC ---------------------------------------------------------------------------
@@ -249,14 +283,19 @@ CC Note: Handbook E48R values: nd=1.531 / Vd=56. Single-term fit reproduces
 CC nd to 0.0005 and underpredicts Vd; acceptable for stock-lens import.
 CC
 CC Density 1.01 g/cm^3; TCE approx 60 ppm/K (lowest among common optical
-CC polymers); dn/dT approx -9.2e-5 /K. Used in injection-molded precision
+CC polymers). Used in injection-molded precision
 CC optics (mobile-camera lens stacks, blu-ray pickups, low-cost imagers).
+CC
+CC Thermal (TD): D0 from the d-line dn/dT of N. Sultanova, S. Kasarova and
+CC   I. Nikolov, Bulg. J. Phys. 40, 258 (2013), Table 1: -1.26e-4 /K from 20 to
+CC   50 C, relative to air; Kasarova et al. (2010) found it nearly constant from
+CC   10 to 50 C. Take it as +-20 %.
 CC ---------------------------------------------------------------------------
 NM E48R 2 0 1.53050 51.7 0 0 1
 GC Zeonex E48R cyclo-olefin polymer; Sultanova Kasarova Nikolov 2009
 ED 6.000000E+001 6.000000E+001 1.010000E+000 0.000000E+000 0 0
 CD 1.2969000E+000 1.1721000E-002 0.0000000E+000 0.0000000E+000 0.0000000E+000 0.0000000E+000
-TD -9.200000E-005 0.000000E+000 0.000000E+000 0.000000E+000 0.000000E+000 0.000000E+000 2.000000E+001
+TD -2.906256E-004 0.000000E+000 0.000000E+000 0.000000E+000 0.000000E+000 0.000000E+000 2.000000E+001
 LD 4.368000E-001 1.052000E+000
 CC
 CC ---------------------------------------------------------------------------
@@ -368,14 +407,19 @@ CC Patch-ZmxModelGlass.ps1 substitutes the combined name with ZEONEX_K26R
 CC at .zmx-import time.
 CC
 CC Density 1.01 g/cm^3; TCE 58 ppm/K (Zeon brochure ASTM E831, -50..100C);
-CC heat distortion 143C (1.82 MPa). dn/dT for COP visible region ~-1e-4 /K
-CC (similar magnitude to E48R; not in Zeon brochure for K26R specifically).
+CC heat distortion 143C (1.82 MPa).
+CC
+CC Thermal (TD): no dn/dT is published for K26R. The TD line takes E48R's,
+CC   another Zeonex cyclo-olefin polymer (N. Sultanova, S. Kasarova and
+CC   I. Nikolov, Bulg. J. Phys. 40, 258 (2013): -1.26e-4 /K, 20-50 C, relative
+CC   to air). Replace it with a measured value
+CC   when there is one.
 CC ---------------------------------------------------------------------------
 NM ZEONEX_K26R 2 0 1.53500 56.26 0 0 1
 GC Zeon Corp Zeonex K26R cyclo-olefin polymer; synthesized from Zeon brochure nd=1.535
 ED 5.800000E+001 5.800000E+001 1.010000E+000 0.000000E+000 0 0
 CD 1.3138000E+000 1.0800000E-002 0.0000000E+000 0.0000000E+000 0.0000000E+000 0.0000000E+000
-TD -1.000000E-004 0.000000E+000 0.000000E+000 0.000000E+000 0.000000E+000 0.000000E+000 2.000000E+001
+TD -2.885319E-004 0.000000E+000 0.000000E+000 0.000000E+000 0.000000E+000 0.000000E+000 2.000000E+001
 LD 4.368000E-001 1.052000E+000
 CC
 CC ---------------------------------------------------------------------------
@@ -401,13 +445,20 @@ CC    @ 656.3 nm (C-line): n approx 1.33161
 CC Vd (computed F/d/C) approx 55.78
 CC
 CC Validity: 0.18 - 1.13 um, distilled water at 19 C.
-CC Density 0.998 g/cm^3 at 20 C; dn/dT approx -1e-4 /K at room temperature.
+CC Density 0.998 g/cm^3 at 20 C.
+CC
+CC Thermal (TD): TIE-19 constants fitted to the IAPWS formulation (IAPWS R9-97,
+CC   "Release on the refractive index of ordinary water substance as a function
+CC   of wavelength, temperature and pressure," 1997) at 1 atm, with the density
+CC   of air-free water of M. Tanaka et al., Metrologia 38, 301 (2001), 0.4-1.0
+CC   um, 0 to 40 C; to 3e-5 in the index. dn_abs/dT at 19 C, d-line: -8.6e-5 /K,
+CC   changing fast with temperature.
 CC ---------------------------------------------------------------------------
 NM WATER 6 0 1.33347 55.78 0 0 1
 GC Distilled water at 19 C; Daimon and Masumura 2007
 ED 0.000000E+000 0.000000E+000 9.980000E-001 -1.000000E-004 0 0
 CD 5.6725261E-001 5.0855505E-003 1.7365811E-001 1.8149387E-002 2.1215315E-002 2.6172607E-002 1.1384932E-001 1.0738886E+001
-TD -1.000000E-004 0.000000E+000 0.000000E+000 0.000000E+000 0.000000E+000 0.000000E+000 1.900000E+001
+TD -2.860836E-004 -6.160433E-006 4.436350E-008 -2.693664E-006 0.000000E+000 0.000000E+000 1.900000E+001
 LD 1.800000E-001 1.130000E+000
 CC
 CC ---------------------------------------------------------------------------
@@ -436,14 +487,19 @@ CC    @ 656.3 nm (C-line): n_o approx 1.37665
 CC Vd (computed F/d/C) approx 106.4
 CC
 CC Validity (Dodge 1984): 0.2 - 7.0 um.
-CC Density 3.18 g/cm^3; TCE 13.8 ppm/K (perp c-axis), 8.5 ppm/K (parallel);
-CC dn/dT approx +1.0e-5 /K (visible, weak temperature dependence).
+CC Density 3.18 g/cm^3; TCE 13.8 ppm/K (perp c-axis), 8.5 ppm/K (parallel).
+CC
+CC Thermal (TD): TIE-19 constants fitted to the absolute dn_o/dT measured by
+CC   A. Feldman, D. Horowitz, R.M. Waxler and M.J. Dodge, "Optical materials
+CC   characterization," NBS Technical Note 993 (1979), Table 4h, ordinary ray,
+CC   0.4579-3.39 um, -100 to +140 C; rms 1.2e-7 /K. dn_o_abs/dT at 20 C, 633 nm:
+CC   +1.09e-6 /K.
 CC ---------------------------------------------------------------------------
 NM MGF2 2 0 1.37774 106.4 0 0 1
 GC Magnesium fluoride ordinary ray; Dodge 1984
 ED 1.380000E+001 8.480000E+000 3.180000E+000 0.000000E+000 0 0
 CD 4.8755108E-001 1.8821824E-003 3.9875031E-001 8.9519887E-003 2.3120353E+000 5.6613562E+002
-TD 1.000000E-005 0.000000E+000 0.000000E+000 0.000000E+000 0.000000E+000 0.000000E+000 2.000000E+001
+TD 3.206966E-006 -7.953496E-009 6.921534E-013 3.102313E-008 0.000000E+000 4.300000E-001 2.000000E+001
 LD 2.000000E-001 7.000000E+000
 CC
 CC ---------------------------------------------------------------------------
@@ -477,14 +533,20 @@ CC Note: numerically identical to CORNING_FS.AGF HPFS_7980. Kept here under
 CC the INFRASIL alias because Thorlabs vendor .zmx files reference this name.
 CC
 CC Validity (Malitson 1965): 0.21 - 3.71 um.
-CC Density 2.20 g/cm^3; TCE 0.55 ppm/K (room temperature, very low);
-CC dn/dT approx +1.25e-5 /K (visible).
+CC Density 2.20 g/cm^3; TCE 0.55 ppm/K (room temperature, very low).
+CC
+CC Thermal (TD): TIE-19 constants fitted to the absolute index of Infrasil 301
+CC   measured in CHARMS (D.B. Leviton, B.J. Frey and T.J. Madison, Proc. SPIE
+CC   6692, 669204, 2007), 0.5-2.5 um, -100 to +27 C; to 2.6e-5 in the index.
+CC   Above +27 C, the end of the measurements, and past 2.5 um (8e-5 at 3.5 um)
+CC   it is extrapolated. dn_abs/dT at 20 C, 633 nm: +8.6e-6 /K. Agrees with the
+CC   CHARMS measurement of Corning 7980 to 2 % from -40 to +20 C.
 CC ---------------------------------------------------------------------------
 NM INFRASIL 2 0 1.45846 67.82 0 0 1
 GC Heraeus Infrasil IR-grade fused silica; Malitson 1965
 ED 5.500000E-001 5.500000E-001 2.200000E+000 0.000000E+000 0 0
 CD 6.9616630E-001 4.6791400E-003 4.0794260E-001 1.3512060E-002 8.9747940E-001 9.7934003E+001
-TD 1.250000E-005 0.000000E+000 0.000000E+000 0.000000E+000 0.000000E+000 0.000000E+000 2.000000E+001
+TD 2.216521E-005 2.312402E-008 -3.247154E-011 2.714058E-008 0.000000E+000 4.650000E-001 2.000000E+001
 LD 2.100000E-001 3.500000E+000
 CC
 CC ---------------------------------------------------------------------------
@@ -516,13 +578,20 @@ CC visible. The published Vd at visible is essentially a curiosity; for IR
 CC design, refer to n at the operating wavelength directly.
 CC
 CC Validity (Connolly 1979): 0.54 - 18.2 um.
-CC Density 5.27 g/cm^3; TCE 7.1 ppm/K (20 C); dn/dT approx +6e-5 /K at IR.
+CC Density 5.27 g/cm^3; TCE 7.1 ppm/K (20 C).
+CC
+CC Thermal (TD): TIE-19 constants fitted to the absolute dn/dT of CVD ZnSe
+CC   measured by A. Feldman, D. Horowitz, R.M. Waxler and M.J. Dodge,
+CC   "Optical materials characterization," NBS Technical Note 993 (1979),
+CC   Table 4m, 0.6328-10.6 um, -100 to +140 C; rms 5e-7 /K. dn_abs/dT at 20 C:
+CC   +1.06e-4 /K at 633 nm, +6.1e-5 /K at 10 um. Agrees with H.H. Li, J. Phys.
+CC   Chem. Ref. Data 13, 103 (1984), eq. (23), to 2 % from -40 to +80 C.
 CC ---------------------------------------------------------------------------
 NM ZNSE 2 0 2.6243 8.20 0 0 1
 GC Zinc selenide CVD; Connolly 1979
 ED 7.100000E+000 6.400000E+000 5.270000E+000 -8.500000E-002 0 0
 CD 4.4581373E+000 4.0344878E-002 4.6721633E-001 1.5317177E-001 2.8956629E+000 2.2218259E+003
-TD -8.500000E-005 0.000000E+000 0.000000E+000 0.000000E+000 0.000000E+000 0.000000E+000 2.000000E+001
+TD 6.117939E-005 1.094959E-008 -3.168567E-011 7.297207E-006 4.439683E-009 4.350000E-001 2.000000E+001
 LD 5.400000E-001 1.820000E+001
 CC
 CC ---------------------------------------------------------------------------
@@ -580,13 +649,23 @@ CC    @ 4.000 um         : n approx 3.4253
 CC    @ 10.0 um          : n approx 3.4179
 CC
 CC Validity (Salzberg-Villa 1957): 1.36 - 11 um.
-CC Density 2.329 g/cm^3; TCE 2.6 ppm/K; dn/dT approx +1.5e-4 /K (IR).
+CC Density 2.329 g/cm^3.
+CC
+CC Thermal (TD): TIE-19 constants fitted to the index of H.H. Li, "Refractive
+CC   index of silicon and germanium and its wavelength and temperature
+CC   derivatives," J. Phys. Chem. Ref. Data 9, 561 (1980), eq. (22), 1.4-11 um,
+CC   -100 to +140 C; to 3e-5 in the index, within Li's 2e-3. dn_abs/dT at 20 C:
+CC   +1.63e-4 /K at 3 um, +1.57e-4 /K at 10 um; within 5 % of the CHARMS
+CC   measurement (B.J. Frey, D.B. Leviton and T.J. Madison, Proc. SPIE 6273,
+CC   62732J, 2006).
+CC Expansion (ED): the mean from -30 to +70 C, 2.53 ppm/K, from C.A. Swenson,
+CC   J. Phys. Chem. Ref. Data 12, 179 (1983), Table 2.
 CC ---------------------------------------------------------------------------
 NM SILICON 2 0 3.42500 0 0 0 1
 GC Crystalline silicon; Salzberg-Villa 1957 (Tatian 1984 Sellmeier recast)
-ED 0.000000E+000 2.600000E+000 2.329000E+000 0.000000E+000 0 0
+ED 2.530000E+000 2.600000E+000 2.329000E+000 0.000000E+000 0 0
 CD 1.0668429E+001 9.0912369E-002 3.0434748E-003 1.2874604E+000 1.5413341E+000 1.2188160E+006
-TD 1.500000E-004 0.000000E+000 0.000000E+000 0.000000E+000 0.000000E+000 0.000000E+000 2.000000E+001
+TD 1.001921E-004 9.056846E-008 -7.870382E-011 3.342307E-005 -5.386174E-009 0.000000E+000 2.000000E+001
 LD 1.360000E+000 1.100000E+001
 CC
 CC ---------------------------------------------------------------------------
@@ -616,14 +695,21 @@ CC    @ 4.000 um         : n approx 4.0247
 CC    @ 10.0 um          : n approx 4.0043
 CC
 CC Validity (Icenogle 1976): 2.5 - 12 um.
-CC Density 5.323 g/cm^3; TCE 5.7 ppm/K; dn/dT approx +4.0e-4 /K (IR,
-CC very large — Ge is thermally sensitive in IR systems).
+CC Density 5.323 g/cm^3.
+CC
+CC Thermal (TD): TIE-19 constants fitted to the index of H.H. Li, J. Phys.
+CC   Chem. Ref. Data 9, 561 (1980), eq. (28), 2.5-12 um, -100 to +140 C; to
+CC   4e-5 in the index, within Li's 2e-3. dn_abs/dT at 20 C: +4.43e-4 /K at
+CC   3 um and +4.04e-4 /K at 10 um, as Li prints. About 5 % above the CHARMS
+CC   measurement (Frey, Leviton and Madison 2006) at 2.5-5 um, as Li's model is.
+CC Expansion (ED): the mean from -30 to +70 C, 5.74 ppm/K, from the lattice
+CC   expansion Li's eq. (28) carries.
 CC ---------------------------------------------------------------------------
 NM GERMANIUM 2 0 4.00400 0 0 0 1
 GC Single-crystal germanium; Icenogle 1976 / Barnes-Piltch 1979 fit
-ED 0.000000E+000 5.700000E+000 5.323000E+000 0.000000E+000 0 0
+ED 5.740000E+000 5.700000E+000 5.323000E+000 0.000000E+000 0 0
 CD 8.2815600E+000 0.0000000E+000 6.7288000E+000 4.4105000E-001 2.1307000E-001 3.8701000E+003
-TD 4.000000E-004 0.000000E+000 0.000000E+000 0.000000E+000 0.000000E+000 0.000000E+000 2.000000E+001
+TD 2.136186E-004 1.526587E-007 -9.614585E-011 1.778954E-004 1.267311E-007 0.000000E+000 2.000000E+001
 LD 2.500000E+000 1.200000E+001
 CC
 CC ===========================================================================
@@ -735,12 +821,18 @@ CC
 CC Aliasing here lets the retrofit resolve those rows via MISC instead of
 CC depending on patcher temp-file plumbing. Same coefficients as ZEONEX_K26R.
 CC (Per Zeon's brochure, K22R and K26R have identical nd=1.535.)
+CC
+CC Thermal (TD): no dn/dT is published for K26R. The TD line takes E48R's,
+CC   another Zeonex cyclo-olefin polymer (N. Sultanova, S. Kasarova and
+CC   I. Nikolov, Bulg. J. Phys. 40, 258 (2013): -1.26e-4 /K, 20-50 C, relative
+CC   to air). Replace it with a measured value
+CC   when there is one.
 CC ---------------------------------------------------------------------------
 NM ZEONEX_K22R&K26R_2017 2 0 1.53500 56.26 0 0 1
 GC Edmund combined-name alias of ZEONEX_K26R (K22R and K26R share nd)
 ED 5.800000E+001 5.800000E+001 1.010000E+000 0.000000E+000 0 0
 CD 1.3138000E+000 1.0800000E-002 0.0000000E+000 0.0000000E+000 0.0000000E+000 0.0000000E+000
-TD -1.000000E-004 0.000000E+000 0.000000E+000 0.000000E+000 0.000000E+000 0.000000E+000 2.000000E+001
+TD -2.885319E-004 0.000000E+000 0.000000E+000 0.000000E+000 0.000000E+000 0.000000E+000 2.000000E+001
 LD 4.368000E-001 1.052000E+000
 CC
 CC ---------------------------------------------------------------------------
