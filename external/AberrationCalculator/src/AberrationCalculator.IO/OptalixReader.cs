@@ -170,6 +170,11 @@ namespace AberrationCalculator.Core.IO
                             // which have no counterpart here. 0 is what LensHH-LT wrote for object
                             // heights before 1.0.158.
                             system.FieldType = ft == 2 || ft == 0 ? FieldType.ObjectHeight : FieldType.ObjectAngle;
+                            // Not converted, as OpticStudio's and Code V's are: which of 3 and 4 is
+                            // paraxial and which real is not established, and a guess would convert
+                            // with the wrong ray. So the fields stay as they are and that is said.
+                            if (ft == 3 || ft == 4)
+                                system.ImportWarnings.Add($"The fields are image heights (FTYP {ft}), which this program does not have; they were read as object angles in degrees, which they are not. Give them as field angles or object heights in Optalix and export again.");
                         }
                         break;
 

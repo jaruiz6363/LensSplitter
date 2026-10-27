@@ -43,6 +43,11 @@ the window now says so in a box you cannot miss, rather than in a line at the bo
 
     dotnet build src/AberrationCalculator.Mcp -c Release
 
+Close every client using the server before you build. A running server locks the DLLs it has
+loaded, so the build replaces the others and fails on those, leaving a folder that mixes two
+builds - the next start fails with `Method not found`. (The setup window's Build button checks
+for running servers and offers to stop them.)
+
 Then point the client at the built executable. For Claude Code:
 
     claude mcp add abcalc -- <repo>/src/AberrationCalculator.Mcp/bin/Release/net8.0/abcalc-mcp
@@ -191,6 +196,9 @@ it matters.
 **Unresolved materials are reported, not thrown.** If a glass cannot be found the analysis
 still runs and still returns, with a warning at the top of the result: every quantity that
 depends on the missing glass is meaningless, and the caller has no other way to learn that.
+The same goes for what the reader had to change to read the file - fields given as image
+heights and converted to object fields, or Code V data left out - each a `WARNING:` line at the
+top of every tool's result.
 
 ## The protocol
 

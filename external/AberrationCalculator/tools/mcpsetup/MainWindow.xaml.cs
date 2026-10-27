@@ -269,6 +269,7 @@ namespace AberrationCalculator.McpSetup
             while (dir != null && !File.Exists(Path.Combine(dir.FullName, "AberrationCalculator.sln")))
                 dir = dir.Parent;
             if (dir == null) { Log("The repository was not found above this program."); return; }
+            if (!StopRunningServers(Path.Combine(dir.FullName, "src", "AberrationCalculator.Mcp", "bin"))) return;
 
             btnBuild.IsEnabled = false;
             Log("Building the server, which takes a few seconds...");
@@ -299,6 +300,56 @@ namespace AberrationCalculator.McpSetup
             }
             catch (Exception ex) { Log("Could not run dotnet: " + ex.Message); }
             finally { btnBuild.IsEnabled = true; RefreshServerState(); }
+        }
+
+        /// <summary>
+        /// Stops, with the user's agreement, every server running from the folder the build writes
+        /// to. A running server locks the DLLs it has loaded, so a build then copies the ones it
+        /// can and fails on the rest - and the folder is left with a new reader beside an old
+        /// Core, which fails with "Method not found" the next time a client starts the server.
+        /// False if servers are running and the user would rather keep them.
+        /// </summary>
+        private bool StopRunningServers(string binFolder)
+        {
+            var running = new List<Process>();
+            foreach (var p in Process.GetProcessesByName(Path.GetFileNameWithoutExtension(ServerExe)))
+            {
+                string? path;
+                try { path = p.MainModule?.FileName; }
+                catch (Exception) { path = null; }   // another user's process, or one already gone
+                if (path != null && path.StartsWith(binFolder, StringComparison.OrdinalIgnoreCase))
+                    running.Add(p);
+                else
+                    p.Dispose();
+            }
+            if (running.Count == 0) return true;
+
+            string started = string.Join(", ", running.Select(p =>
+            {
+                try { return p.StartTime.ToString("d MMM HH:mm"); }
+                catch (Exception) { return "?"; }
+            }));
+            var answer = MessageBox.Show(this,
+                $"{running.Count} abcalc MCP server(s) are running from the folder the build writes to " +
+                $"(started {started}). They lock its files, and building over them leaves a mix of old " +
+                "and new files that fails the next time the server starts.\n\n" +
+                "Stop them and build? Any Claude session using abcalc must be restarted afterwards.",
+                "abcalc servers are running", MessageBoxButton.YesNo, MessageBoxImage.Warning);
+            if (answer != MessageBoxResult.Yes)
+            {
+                Log("Not built: close the Claude sessions using abcalc, then build again.");
+                foreach (var p in running) p.Dispose();
+                return false;
+            }
+
+            foreach (var p in running)
+            {
+                try { p.Kill(); p.WaitForExit(10000); }
+                catch (Exception ex) { Log("Could not stop server " + p.Id + ": " + ex.Message); }
+                finally { p.Dispose(); }
+            }
+            Log($"Stopped {running.Count} running server(s).");
+            return true;
         }
 
         private void Browse_Click(object sender, RoutedEventArgs e)

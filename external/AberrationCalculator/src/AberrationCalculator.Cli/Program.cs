@@ -477,6 +477,8 @@ EXIT CODES
         }
 
         var system = LensFile.Read(lensPath, catalog);
+        foreach (string warning in system.ImportWarnings)
+            Console.Error.WriteLine("warning: " + warning);
 
         // How this instance was BUILT, if anybody has said. Nothing but nodal aberration theory
         // reads it: the paraxial trace, the coefficients and the real ray trace are all

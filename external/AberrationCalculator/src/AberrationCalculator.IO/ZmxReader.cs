@@ -30,6 +30,7 @@ namespace AberrationCalculator.Core.IO
             var notes = ResolveTableGlasses(system, filePath, glass);
             if (glass != null)
                 notes.AddRange(LoadLensCatalogs(system, filePath, glass));
+            ConvertImageHeightFields(system, ReadFileLines(filePath), glass);
             if (notes.Count > 0)
             {
                 string text = string.Join(Environment.NewLine, notes);
@@ -446,6 +447,34 @@ namespace AberrationCalculator.Core.IO
                 }
             }
             return string.Empty;
+        }
+
+        /// <summary>
+        /// OpticStudio's paraxial (FTYP 2) and real (FTYP 3) image heights, converted to the
+        /// object fields that reach them; see <see cref="ImageHeightFields"/>. Any other code
+        /// this program does not know is read as angles, and said to be.
+        /// </summary>
+        private static void ConvertImageHeightFields(OpticalSystem system, string[] lines,
+                                                     Core.Glass.GlassCatalog? glass)
+        {
+            int code = ReadFieldTypeCode(lines);
+            if (code == 0 || code == 1) return;
+            if (code == 2 || code == 3)
+                ImageHeightFields.Convert(system, real: code == 3, glass);
+            else
+                system.ImportWarnings.Add($"The file's field type (FTYP {code}) is not an object angle, object height or image height; its fields were read as object angles in degrees, which they probably are not.");
+        }
+
+        /// <summary>The OpticStudio field type code on the FTYP line, 0 if there is none.</summary>
+        private static int ReadFieldTypeCode(string[] lines)
+        {
+            foreach (var line in lines)
+            {
+                if (!line.StartsWith("FTYP")) continue;
+                var parts = SplitLine(line);
+                return parts.Length > 1 && int.TryParse(parts[1], out int code) ? code : 0;
+            }
+            return 0;
         }
 
         private static FieldType ReadFieldType(string[] lines)
