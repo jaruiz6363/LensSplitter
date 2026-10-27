@@ -51,6 +51,7 @@ namespace AberrationCalculator.Core.IO
             var privateWavelengths = new List<double>();
             var privateGlasses = new Dictionary<string, List<double>>(StringComparer.OrdinalIgnoreCase);
             var notConverted = new List<string>();
+            bool? imageHeightsReal = null; // set when the fields are YIM (false) or YRI (true)
             int refWavelength = 1; // 1-indexed
             double unitScale = 1.0; // default mm
             bool radiusMode = true;
@@ -174,17 +175,22 @@ namespace AberrationCalculator.Core.IO
                     case "YOB":
                         system.FieldType = keyword == "YOB" ? FieldType.ObjectHeight : FieldType.ObjectAngle;
                         fieldsY = Numbers(parts, 1);
-                        break;
-                    case "XAN":
-                    case "XOB":
-                        if (Numbers(parts, 1).Any(x => x != 0))
-                            NotConverted(keyword + " (x fields: this lens is meridional)");
+                        imageHeightsReal = null;
                         break;
                     case "YIM":
                     case "YRI":
+                        // Paraxial or real image heights, converted to object fields once the lens
+                        // is complete. Held as angles until then, so the unit conversion leaves them.
+                        system.FieldType = FieldType.ObjectAngle;
+                        fieldsY = Numbers(parts, 1);
+                        imageHeightsReal = keyword == "YRI";
+                        break;
+                    case "XAN":
+                    case "XOB":
                     case "XIM":
                     case "XRI":
-                        NotConverted(keyword + " (fields as image heights)");
+                        if (Numbers(parts, 1).Any(x => x != 0))
+                            NotConverted(keyword + " (x fields: this lens is meridional)");
                         break;
                     case "WTF":
                         fieldWeights = Numbers(parts, 1);
@@ -367,6 +373,8 @@ namespace AberrationCalculator.Core.IO
             {
                 string note = "Code V import - not converted: " + string.Join(", ", notConverted.Distinct()) + ".";
                 system.Notes = string.IsNullOrEmpty(system.Notes) ? note : system.Notes + Environment.NewLine + note;
+                system.ImportWarnings.Add("The Code V file holds what this program does not read, and it was left out: "
+                                          + string.Join(", ", notConverted.Distinct()) + ".");
             }
 
             // DEDUCED, NOT DECLARED. The file named no catalog; these were worked out from the
@@ -381,6 +389,12 @@ namespace AberrationCalculator.Core.IO
             system.FileUnitScale = unitScale;
             if (unitScale != 1.0)
                 LensUnitConverter.ConvertToMm(system, unitScale);
+
+            if (imageHeightsReal is bool real)
+            {
+                foreach (var f in system.Fields) f.Y *= unitScale;
+                ImageHeightFields.Convert(system, real, glassMgr, aimAtStop: true);
+            }
 
             return system;
         }

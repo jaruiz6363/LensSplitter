@@ -209,6 +209,8 @@ internal static class Program
         if (writer.Unresolved.Count > 0)
             text = "WARNING: unresolved materials: " + string.Join(", ", writer.Unresolved)
                  + "\nEvery quantity that depends on them is unreliable.\n\n" + text;
+        if (writer.ImportWarnings.Count > 0)
+            text = "WARNING: " + string.Join("\n\nWARNING: ", writer.ImportWarnings) + "\n\n" + text;
 
         return new JsonObject
         {
