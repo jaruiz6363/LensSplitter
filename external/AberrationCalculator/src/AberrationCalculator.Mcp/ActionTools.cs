@@ -319,6 +319,8 @@ internal static class ActionTools
         if (writer.Unresolved.Count > 0)
             result = "WARNING: unresolved materials: " + string.Join(", ", writer.Unresolved)
                    + "\nEvery quantity that depends on them is unreliable.\n\n" + result;
+        if (writer.ImportWarnings.Count > 0)
+            result = "WARNING: " + string.Join("\n\nWARNING: ", writer.ImportWarnings) + "\n\n" + result;
 
         return result;
     }
@@ -439,6 +441,8 @@ internal static class ActionTools
 
         var outcome = OptimizationRun.Execute(system, catalog, setup, settings);
         string report = OptimizationReport.Build(outcome, Path.GetFileName(lensPath));
+        if (system.ImportWarnings.Count > 0)
+            report = "WARNING: " + string.Join("\n\nWARNING: ", system.ImportWarnings) + "\n\n" + report;
 
         string? saveTo = BasePath.ResolveIfGiven(Text(a, "save_to"));
         if (!outcome.Ok) return report;

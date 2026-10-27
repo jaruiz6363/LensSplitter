@@ -83,6 +83,9 @@ public sealed class ReportWriter
         }
     }
 
+    /// <summary>What the reader changed to read the lens; see <see cref="OpticalSystem.ImportWarnings"/>.</summary>
+    public IReadOnlyList<string> ImportWarnings => _sys.ImportWarnings;
+
     private double[] PrimaryIndices => _indices[Math.Min(_primary, _indices.Count - 1)];
 
     /// <summary>
@@ -1242,7 +1245,7 @@ public sealed class ReportWriter
 
     private void Warnings(StringBuilder sb, ParaxialResult p)
     {
-        var notes = new List<string>();
+        var notes = new List<string>(_sys.ImportWarnings);
         if (Unresolved.Count > 0)
             notes.Add($"No index for {string.Join(", ", Unresolved)} - treated as air, so every "
                     + "number above is wrong for those surfaces.");

@@ -130,6 +130,12 @@ Two things worth knowing before relying on the numbers:
   field the ninth order arrives and the seventh-order series under-predicts. The report says
   this where it prints the numbers, and [spot-prediction.md](spot-prediction.md) measures it
   against traced rays.
+- **Vignetting factors are ignored.** The coefficients come from a paraxial trace and PRMS
+  integrates over the full circular pupil, so a lens file's vignetting factors (OpticStudio's
+  VDX/VDY/VCX/VCY, Code V's VUY/VLY and the rest) are not read. On a fast lens whose off-axis
+  beams are heavily vignetted in the design program, PRMS off axis is the spot of the unvignetted
+  beam and will be larger than that program's RMS spot. That is a difference of definition, not an
+  error.
 - **In the BUCHDAHL / RIMMER table, τ2-τ20 read zero per surface.** They are not split into
   intrinsic and induced parts. Each surface's *share* of them is in `<name>.surfaces.tsv` (the
   `surface_total` rows), and the WHICH SURFACE table includes them, so its column adds to 100.
@@ -153,6 +159,15 @@ The data files, all tab-separated with full precision, for a script or a spreads
 **Lens files:** OpticStudio `.zmx`, CODE V `.seq`, OPTALIX `.otx`/`.opt`, OSLO `.len`/`.osl`,
 Optiland `.json` and LensHH-LT `.lhlt`. Centred systems of spheres, conics and even aspheres
 (r² to r¹⁶), with the object at infinity or at a finite distance, and mirrors.
+
+**Fields given as image heights** - OpticStudio's paraxial or real image height, Code V's `YIM`
+or `YRI` - are converted on reading to the object fields that reach them at the primary
+wavelength: object angles for an object at infinity, object heights otherwise. A paraxial image
+height is converted paraxially; a real one by the real chief ray, aimed at the stop's centre when
+the file aims rays (Code V always does). The converted fields are printed in WARNINGS, and they
+stay fixed from then on: an optimised design keeps those field angles, not those image heights.
+OPTALIX image-height fields are not converted; the report says so, and the fields should be
+given as angles or object heights in OPTALIX before exporting.
 
 ## 6. The other reports
 
@@ -331,6 +346,11 @@ registers it. It backs up your Claude configuration before every write and leave
 alone; there is a **Remove** button. Choose the `user` scope to have it everywhere. **Restart
 Claude afterwards** - a client reads its MCP servers only when it starts.
 
+**Rebuilding after an update:** close the Claude sessions that use abcalc first. A running server
+locks the files it has loaded, and a build over it replaces only some of them; the server then
+fails with `Method not found` the next time it starts. mcp-setup's **Build** checks for running
+servers and offers to stop them.
+
 By hand, for Claude Code:
 
     claude mcp add abcalc -- <repo>\src\AberrationCalculator.Mcp\bin\Release\net8.0\abcalc-mcp.exe
@@ -461,6 +481,8 @@ resolved.
 | `no operands are declared, so there is nothing to optimise towards` | there is no `<lens>.mf`: add operands with `OP` (section 7) |
 | `--optimize_basin_hopping needs a folder to save into` | add `--save <folder>` |
 | `the design was NOT saved ... writing conics and aspheric terms back into a CODE V file is not implemented` | the optimised figuring cannot go into that format; the values are in the `.optimisation.txt` report (section 7) |
+| `warning: The fields were real image heights (...)` | the file gave its fields as image heights, and they were converted to object fields (section 5). The converted values are in the message; check them if the lens has a lot of distortion |
+| `Method not found` from the MCP server, while the command line works | the server's folder holds DLLs from two builds: it was rebuilt while a Claude session had it running, which locks the files it loaded. Close every Claude session using abcalc, then build again (mcp-setup's **Build** now offers to stop them) |
 | a report or tool refuses a design, naming why | e.g. the ninth order on a figured design, or Forbes' trace on a mirror. The program refuses rather than return a number it cannot vouch for |
 | the MCP server does not appear in Claude | restart Claude after registering; check the scope (section 9) |
 | Optiland tests are skipped | run `tools\setup-python.ps1`, or set `ABCALC_PYTHON_HOME` (section 12) |

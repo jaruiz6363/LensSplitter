@@ -94,6 +94,14 @@ public class OpticalSystem
     public string Designer { get; set; } = string.Empty;
     public string Notes { get; set; } = string.Empty;
 
+    /// <summary>
+    /// What a reader had to change about the lens to read it, and the user must know before
+    /// trusting a number: fields the file gave as image heights, converted here to the object
+    /// fields that reach them. Unlike <see cref="Notes"/>, which travels with the lens, these
+    /// are shown wherever the lens is analysed - the report, the command line, the MCP server.
+    /// </summary>
+    public List<string> ImportWarnings { get; set; } = new();
+
     public List<Surface> Surfaces { get; set; } = new();
     public List<Wavelength> Wavelengths { get; set; } = new();
     public List<Field> Fields { get; set; } = new();
