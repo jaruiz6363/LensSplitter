@@ -94,8 +94,11 @@ namespace AberrationCalculator.Core.IO
 
                 if (s.ModelIndexEnabled)
                     sb.AppendLine($"  GLAS ___BLANK 1 0 {G(s.ModelNd)} {G(s.ModelVd)} {G(s.ModelDPgF)} 0 0 0 0 0");
+                // In capitals: OpticStudio did not resolve SUMITA's K-LaSFn9 from GLAS K-LaSFn9, though its
+                // own catalog spells it that way, and did from GLAS K-LASFN9 (OpticStudio 2022 R2, 2026-10-28).
+                // Its own files always write the name in capitals; this program's readers match either.
                 else if (!string.IsNullOrEmpty(s.Material))
-                    sb.AppendLine($"  GLAS {s.Material} 0 0 0 0 0");
+                    sb.AppendLine($"  GLAS {s.Material.ToUpperInvariant()} 0 0 0 0 0");
 
                 if (s.SemiDiameterMode == SemiDiameterMode.Fixed && s.SemiDiameter > 0)
                     sb.AppendLine($"  DIAM {G(s.SemiDiameter)} 1 0 0 1 \"\"");

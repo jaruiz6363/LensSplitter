@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
 using System.Text;
@@ -38,16 +39,9 @@ namespace AberrationCalculator.Core.IO
             sb.AppendLine("// Exported from AberrationCalculator");
             string title = string.IsNullOrEmpty(system.Title) ? "Untitled" : system.Title;
             sb.AppendLine($"LEN NEW \"{LenName(title)}\"");
-            sb.AppendLine($"SNO1 \"{title.Replace("\"", "'")}\"");
-            if (!string.IsNullOrEmpty(system.Notes))
-            {
-                int slot = 2;
-                foreach (var line in system.Notes.Replace("\r\n", "\n").Split('\n'))
-                {
-                    if (slot > 10) break;   // OSLO keeps nine more note lines
-                    sb.AppendLine($"SNO{slot++} \"{line.Replace("\"", "'")}\"");
-                }
-            }
+            var notes = SystemNotes(title, system.Notes);
+            for (int i = 0; i < notes.Count; i++)
+                sb.AppendLine($"SNO{i + 1} \"{notes[i]}\"");
             if (!string.IsNullOrWhiteSpace(system.Designer))
                 sb.AppendLine($"DES \"{system.Designer.Replace("\"", "'")}\"");
             sb.AppendLine("UNI 1.0");
@@ -171,6 +165,12 @@ namespace AberrationCalculator.Core.IO
 
                 if (s.HasMarginalRaySolve)
                     sb.AppendLine("CALLBACK  1");
+
+                // The image surface has air on both sides, so OSLO's automatic drawing takes it for
+                // a dummy surface and leaves it out ("drawn unless it is a dummy surface", OSLO
+                // reference, surface appearance in lens drawings); DRW ON draws it always.
+                if (i == system.Surfaces.Count - 1)
+                    sb.AppendLine("  DRW ON");
             }
 
             if (wavelengths.Count > 0)
@@ -181,8 +181,41 @@ namespace AberrationCalculator.Core.IO
                 sb.AppendLine("WW  " + string.Join(" ", wavelengths.Select(x => x.Weight.ToString("G", inv))));
             }
             sb.AppendLine($"END {system.Surfaces.Count - 1}");
+
+            // Lens drawing operating conditions, after END as OSLO 6.6 saves them. A .len has no
+            // field points set (OSLO did not save one it was given), so the lens's fields reach OSLO
+            // only here, as the drawing fans; without them OSLO draws its defaults: one fan of 3
+            // axial rays and chief rays alone, too few to see a fast lens's beams. Each field gets
+            // DrawingRays rays across the whole pupil, every value written, none left to OSLO's
+            // defaults. DLFP is the fraction of the full field, which for field angles is the
+            // ratio of tangents (OSLO's object height goes with tan); for object heights, of heights.
+            // The array index counts from 0, as in OSLO's own file:
+            //     DLNR  0 15 / DLNR  1 15 / DLFP  1 0.3333 / DLMN  1 -1.0 / DLMX  1 1.0 / DLNR  2 15
+            // DLRS 3 draws the rays to the image surface, the last of OSLO's four image-space-rays
+            // options (from 0: final distance, wavefront, last drawn surface, image surface), as OSLO
+            // saved it. The default, a final distance, ends every ray on one plane, so beams off
+            // axis run past a curved image; and only with the rays drawn to it is the image surface
+            // drawn (DRW ON, on that surface).
+            // DLNF first: OSLO loads a .len with two drawing fans, and refused DLNR/DLFP/DLMN/DLMX for
+            // index 2 ("Error at line 45: DLNR  2 15", OSLO EDU, 2026-10-29) until there are three.
+            sb.AppendLine("DLRS 3");
+            sb.AppendLine($"DLNF  {system.Fields.Count}");
+            for (int i = 0; i < system.Fields.Count; i++)
+            {
+                double y = Math.Abs(system.Fields[i].Y);
+                double frac = maxField == 0 ? 0.0
+                    : system.FieldType == FieldType.ObjectHeight ? y / maxField
+                    : Math.Tan(y * Math.PI / 180.0) / Math.Tan(maxField * Math.PI / 180.0);
+                sb.AppendLine(string.Format(inv, "DLNR  {0} {1}", i, DrawingRays));
+                sb.AppendLine(string.Format(inv, "DLFP  {0} {1:0.0####}", i, frac));
+                sb.AppendLine(string.Format(inv, "DLMN  {0} -1.0", i));
+                sb.AppendLine(string.Format(inv, "DLMX  {0} 1.0", i));
+            }
             System.IO.File.WriteAllText(filePath, sb.ToString());
         }
+
+        /// <summary>Rays in each lens drawing fan written for OSLO.</summary>
+        public const int DrawingRays = 15;
 
         // The magnification a perfect lens is perfect at: m = n u / (n' u') across it, from the
         // axial ray of the paraxial trace.
@@ -192,6 +225,52 @@ namespace AberrationCalculator.Core.IO
             double uPrime = p.N[s] * p.U[s];
             if (Math.Abs(uPrime) < 1e-300) return 1e7;   // imaged at infinity; OSLO caps it there
             return p.N[s - 1] * p.U[s - 1] / uPrime;
+        }
+
+        /// <summary>The longest system note OSLO accepts. A longer one stops the file loading:
+        /// "Error at sno_: system note: Argument can not contain more than 80 chars" (OSLO EDU,
+        /// 2026-10-29, on a MonoSearch export whose second note was 140 characters).</summary>
+        public const int NoteLength = 80;
+
+        /// <summary>
+        /// The SNO lines: the title in note 1, cut at a word to <see cref="NoteLength"/>, then the
+        /// notes wrapped at words to that length in notes 2 to 9. OSLO has ten notes and reserves
+        /// the tenth for its lens database, so anything past note 9 is dropped. Double quotes,
+        /// which would end the note, become single ones.
+        /// </summary>
+        public static List<string> SystemNotes(string title, string? notes)
+        {
+            var lines = new List<string> { Wrap(title.Replace("\"", "'"))[0] };
+            if (!string.IsNullOrEmpty(notes))
+                foreach (var line in notes.Replace("\r\n", "\n").Split('\n'))
+                    lines.AddRange(Wrap(line.Replace("\"", "'")));
+            return lines.Take(9).ToList();
+
+            // Words longer than a note are cut where the note ends.
+            static List<string> Wrap(string text)
+            {
+                var result = new List<string>();
+                var current = new StringBuilder();
+                foreach (var word in text.Split(' ', StringSplitOptions.RemoveEmptyEntries))
+                {
+                    var w = word;
+                    while (w.Length > NoteLength)
+                    {
+                        if (current.Length > 0) { result.Add(current.ToString()); current.Clear(); }
+                        result.Add(w.Substring(0, NoteLength));
+                        w = w.Substring(NoteLength);
+                    }
+                    if (current.Length > 0 && current.Length + 1 + w.Length > NoteLength)
+                    {
+                        result.Add(current.ToString());
+                        current.Clear();
+                    }
+                    if (current.Length > 0) current.Append(' ');
+                    current.Append(w);
+                }
+                if (current.Length > 0 || result.Count == 0) result.Add(current.ToString());
+                return result;
+            }
         }
 
         /// <summary>
