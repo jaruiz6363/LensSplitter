@@ -946,6 +946,23 @@ CODE V, OSLO and OPTALIX have no r² aspheric term. (This went through the edito
 output was called, so a ZEMAX design saved "as" `out.len` became ZEMAX text in a file named for
 OSLO.)
 
+**An OSLO lens, in particular.** Each line below is what OSLO 6.6 (EDU) wrote itself when the
+setting was made by hand and the lens saved; each fixes a file OSLO refused or drew badly.
+
+- **System notes** hold at most 80 characters each, and OSLO stops loading a file with a longer
+  one ("Argument can not contain more than 80 chars"). The title goes in note 1, cut at a word;
+  the notes are wrapped at words into notes 2 to 9. Note 10 is OSLO's, for its lens database.
+- **Fields.** A `.len` has no field list: `ANG` (or `OBH`) is the full field, and OSLO did not
+  save a field points set into the file. Each OSLO analysis asks for its field as a fraction
+  of the full one. So the fields go across as **lens drawing fans**, after `END`: `DLNF` (the
+  count, first - OSLO loads a `.len` with two fans and refused the lines for a third), then per
+  field, numbered from 0, `DLNR` (15 rays), `DLFP` (the fraction of the full field: tan θ / tan
+  θ<sub>max</sub> for field angles), and `DLMN`/`DLMX` (the whole pupil, -1 to 1).
+- **The image surface is drawn**, with the rays drawn to it: `DLRS 3` (rays to the image
+  surface, the last of OSLO's four options), and `DRW ON` on the image surface, which OSLO
+  otherwise takes for a dummy because it has air on both sides. Without them every ray ended on
+  one plane, so beams off axis ran past a curved image, and the image was not drawn.
+
 **Into the same format**, the optimised design goes back by editing the file rather than
 regenerating it. Only what the optimiser can move ever changes — curvatures, thicknesses, glass
 names, and conics and aspheric terms — and it goes back in the file's own units: a design opened
