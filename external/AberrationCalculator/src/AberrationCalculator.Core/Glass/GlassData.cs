@@ -25,6 +25,19 @@ public enum DispersionFormula
 }
 
 /// <summary>
+/// A glass's availability, as the AGF format numbers it on the NM line. The number is stored in
+/// the catalog file, so these values are fixed by the format.
+/// </summary>
+public enum GlassStatus
+{
+    Standard = 0,
+    Preferred = 1,
+    Obsolete = 2,
+    Special = 3,
+    Melt = 4,
+}
+
+/// <summary>
 /// One catalog glass: enough to evaluate its refractive index and to print it.
 ///
 /// Indices are relative to air at standard temperature and pressure, which is the
@@ -52,6 +65,22 @@ public class GlassData
 
     /// <summary>Free-text status/comment from the catalog.</summary>
     public string? Comment { get; set; }
+
+    /// <summary>Availability from the catalog's NM line; Standard when the line does not give it.</summary>
+    public GlassStatus Status { get; set; } = GlassStatus.Standard;
+
+    /// <summary>
+    /// Thermal expansion from −30 to +70 °C, in 1e-6/K, from the catalog's ED line. NaN when the
+    /// catalog gives none, or gives 0, which vendors write for "not measured".
+    /// </summary>
+    public double Cte { get; set; } = double.NaN;
+
+    /// <summary>
+    /// True when the catalog's listed nd/Vd disagreed with the glass's own dispersion data and
+    /// <see cref="Nd"/> and <see cref="Vd"/> were replaced by the data's values on loading. A
+    /// caller that cannot tell which of the two is wrong, a glass search, can leave these out.
+    /// </summary>
+    public bool ListedValuesCorrected { get; set; }
 
     /// <summary>
     /// Refractive index at <paramref name="lambdaUm"/> micrometres.
