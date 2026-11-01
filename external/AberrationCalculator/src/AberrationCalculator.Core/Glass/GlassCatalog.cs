@@ -12,11 +12,12 @@ namespace AberrationCalculator.Core.Glass;
 /// index are read:
 ///
 ///   NM  name  formula  MIL  nd  vd  exclude  status  melt
+///   ED  cte(−30/+70)  …                thermal expansion; only the first value is kept
 ///   CD  c1 … c10                       dispersion coefficients
 ///   LD  lambda_min lambda_max          validity range, micrometres
 ///   GC  free text                      comment
 ///
-/// Anything else (TD thermal, OD cost, IT transmission) is skipped. A malformed line is
+/// Anything else (the rest of ED, TD thermal, OD cost, IT transmission) is skipped. A malformed line is
 /// skipped rather than aborting the catalog: one bad entry in a vendor file should not cost
 /// you the other six hundred glasses in it.
 /// </summary>
@@ -80,6 +81,8 @@ public class GlassCatalog
                         g.Formula = (DispersionFormula)(int)formula;
                     if (TryNum(parts, 4, out double nd)) g.Nd = nd;
                     if (TryNum(parts, 5, out double vd)) g.Vd = vd;
+                    if (TryNum(parts, 7, out double status) && status >= 0 && status <= 4)
+                        g.Status = (GlassStatus)(int)status;
 
                     _byQualifiedName[catalog + ":" + g.Name] = g;
                     current = g;
@@ -101,6 +104,13 @@ public class GlassCatalog
                     if (current == null) break;
                     if (TryNum(parts, 1, out double lo)) current.LambdaMin = lo;
                     if (TryNum(parts, 2, out double hi)) current.LambdaMax = hi;
+                    break;
+                }
+
+                case "ED":
+                {
+                    if (current == null) break;
+                    if (TryNum(parts, 1, out double cte) && cte > 0) current.Cte = cte;
                     break;
                 }
 
@@ -159,6 +169,7 @@ public class GlassCatalog
             g.Catalog, g.Name, g.Nd, g.Vd, nd, vd);
         g.Nd = nd;
         g.Vd = vd;
+        g.ListedValuesCorrected = true;
         return note;
     }
 

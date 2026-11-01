@@ -145,6 +145,44 @@ public class GlassImportTests : IDisposable
         Assert.Equal(1.770473, glass.Find("HOYA:MC-TAF115")!.Nd, 5);      // listed 1.777047
         Assert.Equal(36.3, glass.Find("SUMITA:F2")!.Vd, 12);              // rounding, left alone
         Assert.DoesNotContain(glass.ListedValueCorrections, n => n.StartsWith("SCHOTT:") || n.StartsWith("OHARA:"));
+        Assert.True(glass.Find("CDGM:H-TK9")!.ListedValuesCorrected);
+        Assert.True(glass.Find("HOYA:MC-TAF115")!.ListedValuesCorrected);
+        Assert.False(glass.Find("SUMITA:F2")!.ListedValuesCorrected);
+        Assert.False(glass.Find("SCHOTT:N-BK7")!.ListedValuesCorrected);
+    }
+
+    [Fact]
+    public void StatusAndExpansionAreReadFromTheBundledCatalogs()
+    {
+        var glass = CatalogLocator.LoadBundled();
+        Assert.Equal(GlassStatus.Preferred, glass.Find("SCHOTT:N-BK7")!.Status);
+        Assert.Equal(GlassStatus.Obsolete, glass.Find("SCHOTT:LAFN7")!.Status);
+        Assert.Equal(GlassStatus.Special, glass.Find("SCHOTT:AF32ECO")!.Status);
+        Assert.Equal(GlassStatus.Standard, glass.Find("OHARA:S-LAH79")!.Status);
+        Assert.Equal(7.1, glass.Find("SCHOTT:N-BK7")!.Cte, 12);
+        Assert.Equal(6.0, glass.Find("OHARA:S-LAH79")!.Cte, 12);
+    }
+
+    [Fact]
+    public void AMissingStatusOrExpansionIsLeftAtItsDefault()
+    {
+        string path = Path.Combine(_dir, "TERSE.AGF");
+        File.WriteAllText(path,
+            "NM SHORTNM 2 0 1.5168 64.17\r\n" +                       // no exclude/status fields
+            "ED 0 0 2.5 0 0\r\n" +                                    // 0 = not measured
+            "CD 1.03961212 0.00600069867 0.231792344 0.0200179144 1.01046945 103.560653 0 0 0 0\r\n" +
+            "LD 0.3 2.5\r\n" +
+            "NM ODDSTAT 2 0 1.5168 64.17 0 9 0\r\n" +                // status outside the format's range
+            "CD 1.03961212 0.00600069867 0.231792344 0.0200179144 1.01046945 103.560653 0 0 0 0\r\n" +
+            "LD 0.3 2.5\r\n");
+        var glass = new GlassCatalog();
+        glass.LoadFile(path);
+
+        var shortNm = glass.Find("TERSE:SHORTNM")!;
+        Assert.Equal(GlassStatus.Standard, shortNm.Status);
+        Assert.True(double.IsNaN(shortNm.Cte));
+        Assert.Equal(GlassStatus.Standard, glass.Find("TERSE:ODDSTAT")!.Status);
+        Assert.True(double.IsNaN(glass.Find("TERSE:ODDSTAT")!.Cte));
     }
 
     [Fact]
